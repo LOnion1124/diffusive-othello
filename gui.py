@@ -139,85 +139,92 @@ def drawScoreboard() -> None:
     screen.blit(score1_text, score1_rect)
     screen.blit(score2_text, score2_rect)
 
+
+def handle_events():
+    mouse_click = None
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            mouse_click = pygame.mouse.get_pos()
+    return mouse_click
+
+def update_game_state(mouse_click, time_diff):
+    global last_time
+    match logic.state:
+        case "start":
+            if mouse_click:
+                logic.startGame()
+                drawInfoBox("Game started.")
+
+        case "game":
+            if not logic.board.canMove(1) and not logic.board.canMove(-1):
+                logic.endGame()
+            else:
+                if logic.game_state == "player1":
+                    if not logic.board.canMove(1):
+                        drawInfoBox("No place left for Player1.")
+                        logic.switchTurn()
+                        last_time = pygame.time.get_ticks()
+                    else:
+                        drawInfoBox("Player1's turn.")
+                        if mouse_click:
+                            x, y = pos2grid(*mouse_click)
+                            if (x, y) != (-1, -1) and logic.board.checkValidMove(player=1, pos=(x, y)):
+                                logic.board.move(player=1, pos=(x, y))
+                                logic.switchTurn()
+                                last_time = pygame.time.get_ticks()
+                            else:
+                                drawInfoBox("Try another position.")
+                elif logic.game_state == "player2":
+                    if not logic.board.canMove(-1):
+                        drawInfoBox("No place left for Player2.")
+                        logic.switchTurn()
+                    else:
+                        drawInfoBox("Player2's turn.")
+                        if game_mode == "PVP":
+                            if mouse_click:
+                                x, y = pos2grid(*mouse_click)
+                                if (x, y) != (-1, -1) and logic.board.checkValidMove(player=-1, pos=(x, y)):
+                                    logic.board.move(player=-1, pos=(x, y))
+                                    logic.switchTurn()
+                                else:
+                                    drawInfoBox("Try another position.")
+                        else:
+                            # player2 is AI
+                            if time_diff >= 300:
+                                grids = logic.board.getGrids()
+                                pred = playerAI.inference(board=grids, player=-1)
+                                logic.board.move(player=-1, pos=pred["pos"])
+                                logic.switchTurn()
+        case "end":
+            drawEnd()
+            if mouse_click:
+                logic.startGame()
+                drawInfoBox("Game restarted.")
+
+def render():
+    match logic.state:
+        case "start":
+            drawStart()
+            drawInfoBox("Diffusive Othello")
+            drawScoreboard()
+        case "game":
+            drawGame()
+            drawScoreboard()
+        case "end":
+            drawEnd()
+            drawScoreboard()
+
 drawStart()
 drawInfoBox("Diffusive Othello")
 drawScoreboard()
 
 while True:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            pygame.quit()
-            sys.exit()
-        
-        match logic.state:
-            case "start":
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    logic.startGame()
-                    drawInfoBox("Game started.")
-                    drawGame()
-                    drawScoreboard()
-
-            case "game":
-                if not logic.board.canMove(1) and not logic.board.canMove(-1):
-                    logic.endGame()
-                else:
-                    if logic.game_state == "player1":
-                        if not logic.board.canMove(1):
-                            drawInfoBox("No place left for Player1.")
-                            logic.switchTurn()
-                            last_time = pygame.time.get_ticks()
-                        else:
-                            drawInfoBox("Player1's turn.")
-
-                            if event.type == pygame.MOUSEBUTTONDOWN:
-                                x_pos, y_pos = pygame.mouse.get_pos()
-                                x, y = pos2grid(x_pos, y_pos)
-                                if (x, y) != (-1, -1) and logic.board.checkValidMove(player=1, pos=(x, y)):
-                                    logic.board.move(player=1, pos=(x, y))
-                                    logic.switchTurn()
-                                    last_time = pygame.time.get_ticks()
-                                    print("changed")
-                                else:
-                                    drawInfoBox("Try another position.")
-                    
-                    elif logic.game_state == "player2":
-                        if not logic.board.canMove(-1):
-                            drawInfoBox("No place left for Player2.")
-                            logic.switchTurn()
-                        else:
-                            drawInfoBox("Player2's turn.")
-
-                            if game_mode == "PVP":
-                                if event.type == pygame.MOUSEBUTTONDOWN:
-                                    x_pos, y_pos = pygame.mouse.get_pos()
-                                    x, y = pos2grid(x_pos, y_pos)
-                                    if (x, y) != (-1, -1) and logic.board.checkValidMove(player=-1, pos=(x, y)):
-                                        logic.board.move(player=-1, pos=(x, y))
-                                        logic.switchTurn()
-                                    else:
-                                        drawInfoBox("Try another position.")
-                            else:
-                                # player2 is AI
-                                print("diff" + str(time_diff))
-                                if time_diff >= 1000:
-                                    grids = logic.board.getGrids()
-                                    pred = playerAI.inference(board=grids, player=-1)
-                                    logic.board.move(player=-1, pos=pred["pos"])
-                                    logic.switchTurn()
-                                # value = pred["value"]
-                
-                drawGame()
-                drawScoreboard()
-            
-            case "end":
-                drawEnd();
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    logic.startGame()
-                    drawInfoBox("Game restarted.")
-                    drawGame()
-                    drawScoreboard()
-
-    time_diff = pygame.time.get_ticks() - last_time # for ai cool down
-
+    mouse_click = handle_events()
+    time_diff = pygame.time.get_ticks() - last_time
+    update_game_state(mouse_click, time_diff)
+    render()
     pygame.display.update()
     FramePerSec.tick(FPS)
