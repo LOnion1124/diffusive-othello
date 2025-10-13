@@ -150,7 +150,7 @@ def handle_events():
             mouse_click = pygame.mouse.get_pos()
     return mouse_click
 
-def update_game_state(mouse_click, time_diff):
+def update_game_state(mouse_click):
     global last_time
     match logic.state:
         case "start":
@@ -193,7 +193,7 @@ def update_game_state(mouse_click, time_diff):
                                     drawInfoBox("Try another position.")
                         else:
                             # player2 is AI
-                            if time_diff >= 300:
+                            if pygame.time.get_ticks() - last_time >= 300:
                                 grids = logic.board.getGrids()
                                 pred = playerAI.inference(board=grids, player=-1)
                                 logic.board.move(player=-1, pos=pred["pos"])
@@ -223,8 +223,7 @@ drawScoreboard()
 
 while True:
     mouse_click = handle_events()
-    time_diff = pygame.time.get_ticks() - last_time
-    update_game_state(mouse_click, time_diff)
+    update_game_state(mouse_click)
     render()
     pygame.display.update()
     FramePerSec.tick(FPS)
