@@ -123,7 +123,7 @@ class OthelloDataset(Dataset):
         }
 
 
-def selfPlayOneGame(model: AlphaNet, device: str = "cuda", verbose: bool = False) -> GameRecorder:
+def selfPlayOneGame(model: AlphaNet, device: str = "cuda") -> GameRecorder:
     model.eval()
     logic = GameLogic()
     recorder = GameRecorder()
@@ -158,16 +158,8 @@ def selfPlayOneGame(model: AlphaNet, device: str = "cuda", verbose: bool = False
         move = MoveData(board, pos, player)
         recorder.recordMove(move)
         logic.switchTurn()
-        if verbose:
-            print("game state: " + logic.game_state)
-            print(f"move: ({pos[0]}, {pos[1]})")
-            print("board:")
-            print(str(logic.board))
-            print(f"score: {logic.board.grid_count[1]} : {logic.board.grid_count[-1]}\n")
     winner = logic.winner
     recorder.recordEnd(winner)
-    if verbose:
-        print(f"winner: {logic.winner}\n\n")
     return recorder
 
 def selfPlay(
@@ -180,11 +172,12 @@ def selfPlay(
 ) -> OthelloDataset:
     game_list = []
     for i in range(num_play):
-        game = selfPlayOneGame(model, device, verbose=verbose)
+        game = selfPlayOneGame(model, device)
         game_list.append(game)
-        if ((i + 1) % (max(num_play // 5, 1)) == 0):
+        if verbose and (i + 1) % (max(num_play // 5, 1)) == 0:
             print(f"playing... {i + 1}/{num_play}")
-    print("done")
+    if verbose:
+        print("done")
     dataset = OthelloDataset(game_list)
     if save_to_file:
         torch.save(dataset, file_name)
