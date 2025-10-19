@@ -11,13 +11,18 @@ class GameAI:
         # board: provided by logic.board.getGrids()
         board_size = len(board)
         # translate board
-        state = MoveData.generateState(board, player)
-        state = torch.tensor(state, dtype=torch.get_default_dtype(), device=device).unsqueeze(0) # (1, 3, board_size, board_size)
-        mask = MoveData.generateMask(board, player)
-        mask = torch.tensor(mask, dtype=torch.bool, device=device).view(1, -1) # (1, board_size * board_size)
+        dummy_move = MoveData(player, board)
+        state, mask = (
+            dummy_move.state,
+            dummy_move.mask
+        )
+        # state = MoveData.generateState(board, player)
+        # state = torch.tensor(state, dtype=torch.get_default_dtype(), device=device).unsqueeze(0) # (1, 3, board_size, board_size)
+        # mask = MoveData.generateMask(board, player)
+        # mask = torch.tensor(mask, dtype=torch.bool, device=device).view(1, -1) # (1, board_size * board_size)
 
         self.model.eval()
-        log_policy, value = self.model(state, legal_mask=mask)
+        log_policy, value = self.model(state.unsqueeze(0), legal_mask=mask.unsqueeze(0))
         target_idx = torch.argmax(log_policy.view(-1))
         value = value.item
         x, y = target_idx // board_size, target_idx % board_size
