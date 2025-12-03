@@ -1,12 +1,12 @@
 import torch
 from src.model.model import AlphaNet
 from src.selfplay.selfplay import MoveData
-from src.config import config
+from src.config import cfg
 
 class GameAI:
     def __init__(self, device="cuda"):
         self.model = AlphaNet().to(device)
-        self.model.load_state_dict(torch.load(config["model_path"]))
+        self.model.load_state_dict(torch.load(cfg["model_path"]))
     
     def inference(self, board: list[list[int]], player: int, device="cuda"):
         # board: provided by logic.board.getGrids()

@@ -2,6 +2,7 @@ import pygame
 import sys
 from src.game.logic import GameLogic
 from src.model.inference import GameAI
+from src.config import cfg, args
 
 # Predefined colors
 BLACK   = (0, 0, 0)
@@ -32,7 +33,8 @@ FramePerSec = pygame.time.Clock()
 # game assets
 logic = GameLogic()
 playerAI = GameAI()
-game_mode = "PVE" # "PVP" or "PVE"
+game_mode = args.game_mode # "PVP" or "PVE"
+# print("playing at " + game_mode + " mode")
 last_time = pygame.time.get_ticks() # for AI cool down
 
 grid_size = 60

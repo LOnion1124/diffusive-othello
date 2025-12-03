@@ -1,8 +1,11 @@
 import yaml
+import argparse
 
-config = {}
+cfg = {}
 
 with open('config.yaml', 'r') as file:
-   config = yaml.safe_load(file)
+   cfg = yaml.safe_load(file)
 
-print(config)
+parser = argparse.ArgumentParser()
+parser.add_argument("game_mode", type=str, default="PVP")
+args = parser.parse_args()
