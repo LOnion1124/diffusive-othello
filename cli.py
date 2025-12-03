@@ -1,4 +1,4 @@
-from logic import GameLogic
+from src.game.logic import GameLogic
 
 class CLIGame:
     def __init__(self) -> None:

@@ -1,6 +1,6 @@
 import torch
-from model import AlphaNet
-from logic import GameLogic
+from src.model.model import AlphaNet
+from src.game.logic import GameLogic
 from torch.utils.data import Dataset, DataLoader
 
 class MoveData:

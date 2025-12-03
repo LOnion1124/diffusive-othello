@@ -1,5 +1,4 @@
 import torch
-from model import AlphaNet
 
 def train_step(model, optimizer, data, device="cuda"):
     model.train()
