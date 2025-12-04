@@ -1,1 +1,2 @@
 model_path: "model/latest.pth"
+use_cuda: False

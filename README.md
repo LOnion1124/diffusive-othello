@@ -12,6 +12,9 @@ python -m venv venv
 # then activate it base on your system
 # install torch base on your CUDA version, e.g., CUDA 13.0
 pip install torch --index-url https://download.pytorch.org/whl/cu130
+# if you don't have CUDA installed, simply install torch
+# and set `use_cuda` to `False` in config.yaml
+pip install torch
 # install required packages
 pip install -r requirements.txt
 ```
