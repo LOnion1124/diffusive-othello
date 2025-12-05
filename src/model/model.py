@@ -3,10 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class AlphaNet(nn.Module):
-    def __init__(self, board_size=9, in_channels=3, num_filters=64, num_res_blocks=3, action_size=None):
+    def __init__(self, board_size=9, in_channels=3, num_filters=64, num_res_blocks=3):
         super().__init__()
         H = board_size
-        A = action_size if action_size is not None else H*H
         self.conv0 = nn.Conv2d(in_channels, num_filters, kernel_size=3, stride=1, padding=1)
         self.bn0 = nn.BatchNorm2d(num_filters)
         # residual blocks
@@ -22,12 +21,13 @@ class AlphaNet(nn.Module):
         # policy head
         self.policy_conv = nn.Conv2d(num_filters, 2, kernel_size=1)
         self.policy_bn = nn.BatchNorm2d(2)
-        self.policy_fc = nn.Linear(2 * H * H, A)
+        self.policy_fc = nn.Linear(2 * H * H, H * H)
         # value head
         self.value_conv = nn.Conv2d(num_filters, 1, kernel_size=1)
         self.value_bn = nn.BatchNorm2d(1)
         self.value_fc1 = nn.Linear(1 * H * H, 64)
         self.value_fc2 = nn.Linear(64, 1)
+
         self._init_weights()
 
     def _init_weights(self):
@@ -59,6 +59,3 @@ class AlphaNet(nn.Module):
         v = F.relu(self.value_fc1(v))
         value = torch.tanh(self.value_fc2(v)).squeeze(1)  # in [-1,1]
         return policy, value  # policy: log-prob, value: scalar
-    
-if __name__ == "__main__":
-    pass
