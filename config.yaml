@@ -1,2 +1,8 @@
 model_path: "model/latest.pth"
 use_cuda: False
+
+# for development only
+board_size: 9
+mcts:
+  save_data: False
+  verbose: True

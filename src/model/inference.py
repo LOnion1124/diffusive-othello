@@ -1,5 +1,5 @@
 import torch
-from src.model.model import AlphaNet
+from model.alphanet.network import AlphaNet
 from src.selfplay.selfplay import MoveData
 from src.config import cfg
 

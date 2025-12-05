@@ -8,4 +8,4 @@ with open('config.yaml', 'r') as file:
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--mode", type=str, default="PVP")
-args = parser.parse_args()
+args = parser.parse_known_args()

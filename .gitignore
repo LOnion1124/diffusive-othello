@@ -1,6 +1,8 @@
 __pycache__/
 venv/
 
+test.py
+
 *.pyc
 *.ipynb
 *.pt
