@@ -1,5 +1,5 @@
 import torch
-from model.alphanet.network import AlphaNet
+from src.model.alphanet.network import AlphaNet
 from src.game.logic import GameLogic
 from torch.utils.data import Dataset, DataLoader
 

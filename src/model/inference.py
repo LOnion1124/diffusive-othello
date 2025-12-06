@@ -1,5 +1,5 @@
 import torch
-from model.alphanet.network import AlphaNet
+from src.model.alphanet.network import AlphaNet
 from src.selfplay.selfplay import MoveData
 from src.config import cfg
 
@@ -20,12 +20,16 @@ class GameAI:
             dummy_move.state,
             dummy_move.mask
         )
+        valid_cnt = torch.sum(mask).item()
         
         self.model.eval()
         log_policy, value = self.model(state.unsqueeze(0), legal_mask=mask.unsqueeze(0))
-        target_idx = torch.argmax(log_policy.view(-1))
+        log_policy = log_policy.view(-1) # (H*H, )
+        _, rank = log_policy.sort(descending=True)
+        rank = rank.tolist() # indices as position index, ranked by score
+        target_idx = rank[0]
         value = value.item
         x, y = target_idx // board_size, target_idx % board_size
 
-        return {"pos": (x, y), "value": value}
+        return {"pos": (x, y), "value": value, "rank": rank, "valid_cnt": valid_cnt}
 

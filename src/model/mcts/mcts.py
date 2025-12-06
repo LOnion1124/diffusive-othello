@@ -1,5 +1,6 @@
 from mcts_simple import *
 from src.config import cfg, args
+from src.model.inference import GameAI
 
 class DO(Game):
     def __init__(self):
@@ -7,6 +8,10 @@ class DO(Game):
         mcts_cfg = cfg['mcts']
         self.save_data = mcts_cfg['save_data']
         self.verbose = mcts_cfg['verbose']
+        self.use_model = mcts_cfg['use_model']
+        if self.use_model:
+            self.model = GameAI()
+            self.num_actions = mcts_cfg['num_actions']
 
         # create board
         S = cfg['board_size']
@@ -45,7 +50,7 @@ class DO(Game):
             print(board_str)
 
     def get_state(self):
-        pass
+        return self.board
 
     def number_of_players(self):
         return len(self.players)
@@ -54,38 +59,49 @@ class DO(Game):
         return self.cur_player_id
     
     def possible_actions(self):
-        S = self.board_size
-        player = self.players[self.cur_player_id]
+        res = []
+        
+        if self.use_model:
+            model_out = self.model.inference(board=self.board, player=self.players[self.cur_player_id])
+            # choose top k actions
+            k = min(self.num_actions, model_out['valid_cnt'])
+            if k == 0:
+                return [-1]
+            rank = model_out['rank']
+            res = rank[:k]
+        else:
+            S = self.board_size
+            player = self.players[self.cur_player_id]
+            # get valid cells for current move
+            valid_cells = [[0 for _ in range(S)] for _ in range(S)]
+            for x in range(S):
+                for y in range(S):
+                    if valid_cells[x][y] == 1:
+                        continue
+                    if self.board[x][y] == player:
+                        dxs = []
+                        dys = []
+                        if x - 1 >= 0:
+                            dxs.append(-1)
+                        if x + 1 < S:
+                            dxs.append(1)
+                        if y - 1 >= 0:
+                            dys.append(-1)
+                        if y + 1 < S:
+                            dys.append(1)
 
-        # get valid cells for current move
-        valid_cells = [[0 for _ in range(S)] for _ in range(S)]
-        for x in range(S):
-            for y in range(S):
-                if valid_cells[x][y] == 1:
-                    continue
-                if self.board[x][y] == player:
-                    dxs = []
-                    dys = []
-                    if x - 1 >= 0:
-                        dxs.append(-1)
-                    if x + 1 < S:
-                        dxs.append(1)
-                    if y - 1 >= 0:
-                        dys.append(-1)
-                    if y + 1 < S:
-                        dys.append(1)
-
-                    for dx in dxs:
-                        if self.board[x + dx][y] == 0:
-                            valid_cells[x + dx][y] = 1
-                    for dy in dys:
-                        if self.board[x][y + dy] == 0:
-                            valid_cells[x][y + dy] = 1
-
-        # encode valid cells
-        res = [x * S + y for x in range(S) for y in range(S) if valid_cells[x][y] == 1]
-        if len(res) == 0:
-            res = [-1] # no valid move
+                        for dx in dxs:
+                            if self.board[x + dx][y] == 0:
+                                valid_cells[x + dx][y] = 1
+                        for dy in dys:
+                            if self.board[x][y + dy] == 0:
+                                valid_cells[x][y + dy] = 1
+            # check valid move
+            if len(valid_cells) == 0:
+                return [-1]
+            # encode valid cells
+            res = [x * S + y for x in range(S) for y in range(S) if valid_cells[x][y] == 1]
+            
         return res
     
     def take_action(self, action):
