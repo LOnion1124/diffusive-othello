@@ -4,7 +4,8 @@ use_cuda: False
 # for development only
 board_size: 9
 mcts:
-  save_data: False
-  verbose: True
+  save_data: True
+  data_path: "data/mcts.json"
+  verbose: False
   use_model: False
   num_actions: 5

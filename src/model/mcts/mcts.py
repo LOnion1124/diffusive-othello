@@ -2,6 +2,8 @@ from mcts_simple import *
 from src.config import cfg, args
 from src.model.inference import GameAI
 
+import ipdb
+
 class DO(Game):
     def __init__(self):
         # load config
@@ -28,16 +30,18 @@ class DO(Game):
         self.cur_player_id = 0
 
         # selfplay data
-        self.gamedata = {'state': [], 'policy': [], 'value': []}
+        if self.save_data:
+            self.game_data = {'state': [], 'policy': [], 'player': []}
+            self.move_cnt = 0
 
     def board2str(self):
         S = self.board_size
-        first_line = '|'.join(f"{num:3d}" for num in self.board[0])
+        first_line = '|'.join(" O " if num == 1 else (" X " if num == -1 else "   ") for num in self.board[0])
         sep = '-' * len(first_line)
 
         lines = []
         for i, row in enumerate(self.board):
-            line = '|'.join(f"{num:3d}" for num in row)
+            line = '|'.join(" O " if num == 1 else (" X " if num == -1 else "   ") for num in row)
             lines.append(line)
             if i != S - 1:
                 lines.append(sep)
@@ -48,6 +52,7 @@ class DO(Game):
         if self.verbose:
             board_str = self.board2str()
             print(board_str)
+            input()
 
     def get_state(self):
         return self.board
@@ -96,11 +101,11 @@ class DO(Game):
                         for dy in dys:
                             if self.board[x][y + dy] == 0:
                                 valid_cells[x][y + dy] = 1
-            # check valid move
-            if len(valid_cells) == 0:
-                return [-1]
+
             # encode valid cells
             res = [x * S + y for x in range(S) for y in range(S) if valid_cells[x][y] == 1]
+            if len(res) == 0:
+                res = [-1] # no valid move
             
         return res
     
@@ -117,18 +122,26 @@ class DO(Game):
 
         # save game data
         if self.save_data:
+            self.move_cnt += 1
+
             # make 3-layer state
             state_empty = [[1 if status == 0 else 0 for status in row] for row in self.board]
             state_player = [[1 if status == player else 0 for status in row] for row in self.board]
             state_opponent = [[1 if status == opponent else 0 for status in row] for row in self.board]
-            self.gamedata['state'].append([state_empty, state_player, state_opponent])
+            self.game_data['state'].append([state_empty, state_player, state_opponent])
 
             # make one-hot policy
             policy = [[0 for _ in range(S)] for _ in range(S)]
             policy[x][y] = 1
-            self.gamedata['policy'].append(policy)
+            self.game_data['policy'].append(policy)
+
+            # record player
+            self.game_data['player'].append(self.cur_player_id)
         
         # play move and update
+        if self.board[x][y] != 0:
+            print("error: invalid action")
+
         self.board[x][y] = player
         dxs = [0]
         dys = [0]
@@ -164,3 +177,91 @@ class DO(Game):
             winners.append(0)
             winners.append(1)
         return winners
+
+def choose_distributed_action(node: Node, temperature: float = 1.0) -> int:
+    """
+    Choose next action base on distribution with temperature for exploration
+    """
+    
+    if not node.children:
+        return node.rng.choice(list(node.children.keys()))
+    
+    n_total = sum(child.n for child in node.children.values())
+    
+    if n_total == 0:
+        return node.rng.choice(list(node.children.keys()))
+    
+    actions = []
+    probs = []
+    for action, child in node.children.items():
+        actions.append(action)
+        # Apply temperature to make distribution softer
+        probs.append((child.n / n_total) ** (1.0 / temperature) if temperature > 0 else child.n / n_total)
+    
+    # Normalize probabilities after temperature scaling
+    prob_sum = sum(probs)
+    probs = [p / prob_sum for p in probs]
+    
+    return node.rng.choices(actions, weights=probs, k=1)[0]
+
+class MyMCTS(MCTS):
+    """
+    A special version of MCTS enabling saving selfplay data to file
+    """
+    def __init__(self, game, allow_transpositions = True, training = True, seed = None):
+        super().__init__(game, allow_transpositions, training, seed)
+
+        mcts_cfg = cfg['mcts']
+        self.save_data = mcts_cfg['save_data']
+        self.data_path = mcts_cfg['data_path']
+        if self.save_data:
+            self.game_data = {'state': [], 'policy': [], 'value': []}
+            self.total_move_cnt = 0
+        
+    # override self_play to save selfplay data
+    def step(self) -> None:
+        if self.training is True:
+            self.backpropagation(self.simulation(self.expansion(self.selection(self.root))))
+        else:
+            node = self.root
+            while not self.copied_game.has_outcome():
+                self.copied_game.render()
+                if len(node.children) > 0:
+                    if not self.save_data:
+                        action = node.choose_best_action(self.training)
+                    else:
+                        # Use temperature > 1.0 to add exploration randomness
+                        action = choose_distributed_action(node, temperature=1.5)
+                    node = node.children[action]
+                else:
+                    action = self.rng.choice(self.copied_game.possible_actions())
+
+                self.copied_game.take_action(action)
+            self.copied_game.render()
+
+            # record game data
+            if self.save_data:
+                self.game_data['state'] += self.copied_game.game_data['state']
+                self.game_data['policy'] += self.copied_game.game_data['policy']
+                winner = self.copied_game.winner()[0]
+                players = self.copied_game.game_data['player']
+                values = [1 if player == winner else 0 for player in players]
+                self.game_data['value'] += values
+                self.total_move_cnt += self.copied_game.move_cnt
+            
+        self.copied_game = deepcopy(self.game)
+
+    def self_play(self, iterations: int = 1) -> None:
+        if self.save_data:
+            self.game_data = {'state': [], 'policy': [], 'value': []}
+            self.total_move_cnt = 0
+        
+        desc = "Training" if self.training is True else "Evaluating"
+        for _ in tqdm(range(iterations), desc = desc):
+            self.step()
+        
+        # save game data to file
+        if not self.training and self.save_data:
+            import json
+            with open(self.data_path, "w", encoding="utf-8") as f:
+                json.dump(self.game_data, f)
