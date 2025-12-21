@@ -7,5 +7,4 @@ mcts:
   save_data: True
   data_path: "data/mcts.json"
   verbose: False
-  use_model: False
-  num_actions: 5
+  use_model: True

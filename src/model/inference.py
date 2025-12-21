@@ -26,10 +26,9 @@ class GameAI:
 
         target_idx = log_policy.view(-1).argmax().item()
         x, y = target_idx // board_size, target_idx % board_size
-
         value = value.item()
+        scores_list = log_policy.view(-1).exp().tolist()
+        mask_list = mask.tolist()
 
-        log_policy_list = log_policy.view(board_size, board_size).tolist()
-
-        return {"pos": (x, y), "value": value, "scores": log_policy_list, "mask": mask}
+        return {"pos": (x, y), "value": value, "scores": scores_list, "mask": mask_list}
 

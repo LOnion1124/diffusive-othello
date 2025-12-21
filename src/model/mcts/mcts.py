@@ -10,10 +10,6 @@ class DO(Game):
         mcts_cfg = cfg['mcts']
         self.save_data = mcts_cfg['save_data']
         self.verbose = mcts_cfg['verbose']
-        self.use_model = mcts_cfg['use_model']
-        if self.use_model:
-            self.model = GameAI()
-            self.num_actions = mcts_cfg['num_actions']
 
         # create board
         S = cfg['board_size']
@@ -66,41 +62,32 @@ class DO(Game):
     def possible_actions(self):
         res = []
         
-        if self.use_model:
-            model_out = self.model.inference(board=self.board, player=self.players[self.cur_player_id])
-            # choose top k actions
-            k = min(self.num_actions, model_out['valid_cnt'])
-            if k == 0:
-                return [-1]
-            rank = model_out['rank']
-            res = rank[:k]
-        else:
-            S = self.board_size
-            player = self.players[self.cur_player_id]
-            # get valid cells for current move
-            valid_cells = [[0 for _ in range(S)] for _ in range(S)]
-            for x in range(S):
-                for y in range(S):
-                    if valid_cells[x][y] == 1:
-                        continue
-                    if self.board[x][y] == player:
-                        dxs = []
-                        dys = []
-                        if x - 1 >= 0:
-                            dxs.append(-1)
-                        if x + 1 < S:
-                            dxs.append(1)
-                        if y - 1 >= 0:
-                            dys.append(-1)
-                        if y + 1 < S:
-                            dys.append(1)
+        S = self.board_size
+        player = self.players[self.cur_player_id]
+        # get valid cells for current move
+        valid_cells = [[0 for _ in range(S)] for _ in range(S)]
+        for x in range(S):
+            for y in range(S):
+                if valid_cells[x][y] == 1:
+                    continue
+                if self.board[x][y] == player:
+                    dxs = []
+                    dys = []
+                    if x - 1 >= 0:
+                        dxs.append(-1)
+                    if x + 1 < S:
+                        dxs.append(1)
+                    if y - 1 >= 0:
+                        dys.append(-1)
+                    if y + 1 < S:
+                        dys.append(1)
 
-                        for dx in dxs:
-                            if self.board[x + dx][y] == 0:
-                                valid_cells[x + dx][y] = 1
-                        for dy in dys:
-                            if self.board[x][y + dy] == 0:
-                                valid_cells[x][y + dy] = 1
+                    for dx in dxs:
+                        if self.board[x + dx][y] == 0:
+                            valid_cells[x + dx][y] = 1
+                    for dy in dys:
+                        if self.board[x][y + dy] == 0:
+                            valid_cells[x][y + dy] = 1
 
             # encode valid cells
             res = [x * S + y for x in range(S) for y in range(S) if valid_cells[x][y] == 1]
@@ -139,8 +126,6 @@ class DO(Game):
             self.game_data['player'].append(self.cur_player_id)
         
         # play move and update
-        if self.board[x][y] != 0:
-            print("error: invalid action")
 
         self.board[x][y] = player
         dxs = [0]
@@ -201,15 +186,15 @@ def choose_distributed_action(node: Node, temperature: float = 1.0) -> int:
     # Normalize probabilities after temperature scaling
     prob_sum = sum(probs)
     probs = [p / prob_sum for p in probs]
-    
+
     return node.rng.choices(actions, weights=probs, k=1)[0]
 
 class MyMCTS(MCTS):
     """
     A special version of MCTS enabling saving selfplay data to file
     """
-    def __init__(self, game, allow_transpositions = True, training = True, seed = None):
-        super().__init__(game, allow_transpositions, training, seed)
+    def __init__(self, game, training = True, seed = None):
+        super().__init__(game, allow_transpositions=False, training=training, seed=seed)
 
         mcts_cfg = cfg['mcts']
         self.save_data = mcts_cfg['save_data']
@@ -218,6 +203,11 @@ class MyMCTS(MCTS):
             self.game_data = {'state': [], 'policy': [], 'value': []}
             self.total_move_cnt = 0
         
+        self.use_model = mcts_cfg['use_model']
+        if self.use_model:
+            device = "cuda" if cfg['use_cuda'] else "cpu"
+            self.model = GameAI(device)
+
     # override self_play to save selfplay data
     def step(self) -> None:
         if self.training is True:
@@ -226,12 +216,21 @@ class MyMCTS(MCTS):
             node = self.root
             while not self.copied_game.has_outcome():
                 self.copied_game.render()
-                if len(node.children) > 0:
-                    if not self.save_data:
-                        action = node.choose_best_action(self.training)
+                if self.use_model:
+                    # make choice based on inference
+                    board = self.copied_game.get_state()
+                    player = self.copied_game.players[self.copied_game.current_player()]
+                    pred_dict = self.model.inference(board=board, player=player)
+                    scores, mask = pred_dict['scores'], pred_dict['mask']
+                    actions = [i for i, m in enumerate(mask) if m]
+                    probs = [scores[i] for i in actions]
+                    if len(actions) == 0:
+                        action = -1
                     else:
-                        # Use temperature > 1.0 to add exploration randomness
-                        action = choose_distributed_action(node, temperature=1.5)
+                        action = self.rng.choices(actions, weights=probs, k=1)[0]
+                elif len(node.children) > 0:
+                    # Use temperature > 1.0 to add exploration randomness
+                    action = choose_distributed_action(node, temperature=1.5)
                     node = node.children[action]
                 else:
                     action = self.rng.choice(self.copied_game.possible_actions())
