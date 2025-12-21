@@ -33,7 +33,7 @@ FramePerSec = pygame.time.Clock()
 # game assets
 logic = GameLogic()
 playerAI = GameAI()
-game_mode = args.mode # "PVP" or "PVE"
+game_mode = args[0].mode # "PVP" or "PVE"
 last_time = pygame.time.get_ticks() # for AI cool down
 
 grid_size = 60
