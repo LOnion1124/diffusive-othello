@@ -20,16 +20,16 @@ class GameAI:
             dummy_move.state,
             dummy_move.mask
         )
-        valid_cnt = torch.sum(mask).item()
         
         self.model.eval()
         log_policy, value = self.model(state.unsqueeze(0), legal_mask=mask.unsqueeze(0))
-        log_policy = log_policy.view(-1) # (H*H, )
-        _, rank = log_policy.sort(descending=True)
-        rank = rank.tolist() # indices as position index, ranked by score
-        target_idx = rank[0]
-        value = value.item
+
+        target_idx = log_policy.view(-1).argmax().item()
         x, y = target_idx // board_size, target_idx % board_size
 
-        return {"pos": (x, y), "value": value, "rank": rank, "valid_cnt": valid_cnt}
+        value = value.item()
+
+        log_policy_list = log_policy.view(board_size, board_size).tolist()
+
+        return {"pos": (x, y), "value": value, "scores": log_policy_list, "mask": mask}
 
