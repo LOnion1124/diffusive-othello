@@ -2,8 +2,6 @@ from mcts_simple import *
 from src.config import cfg, args
 from src.model.inference import GameAI
 
-import ipdb
-
 class DO(Game):
     def __init__(self):
         # load config
@@ -27,7 +25,7 @@ class DO(Game):
 
         # selfplay data
         if self.save_data:
-            self.game_data = {'state': [], 'policy': [], 'player': []}
+            self.game_data = {'state': [], 'mask': [], 'policy': [], 'player': []}
             self.move_cnt = 0
 
     def board2str(self):
@@ -59,16 +57,15 @@ class DO(Game):
     def current_player(self):
         return self.cur_player_id
     
-    def possible_actions(self):
-        res = []
-        
+    def generate_mask(self):
         S = self.board_size
         player = self.players[self.cur_player_id]
+
         # get valid cells for current move
-        valid_cells = [[0 for _ in range(S)] for _ in range(S)]
+        mask = [[0 for _ in range(S)] for _ in range(S)]
         for x in range(S):
             for y in range(S):
-                if valid_cells[x][y] == 1:
+                if mask[x][y] == 1:
                     continue
                 if self.board[x][y] == player:
                     dxs = []
@@ -84,16 +81,20 @@ class DO(Game):
 
                     for dx in dxs:
                         if self.board[x + dx][y] == 0:
-                            valid_cells[x + dx][y] = 1
+                            mask[x + dx][y] = 1
                     for dy in dys:
                         if self.board[x][y + dy] == 0:
-                            valid_cells[x][y + dy] = 1
-
-            # encode valid cells
-            res = [x * S + y for x in range(S) for y in range(S) if valid_cells[x][y] == 1]
-            if len(res) == 0:
-                res = [-1] # no valid move
-            
+                            mask[x][y + dy] = 1
+        return mask
+    
+    def possible_actions(self):
+        res = []
+        S = self.board_size
+        mask = self.generate_mask()
+        # encode valid cells
+        res = [x * S + y for x in range(S) for y in range(S) if mask[x][y] == 1]
+        if len(res) == 0:
+            res = [-1] # no valid move
         return res
     
     def take_action(self, action):
@@ -116,6 +117,10 @@ class DO(Game):
             state_player = [[1 if status == player else 0 for status in row] for row in self.board]
             state_opponent = [[1 if status == opponent else 0 for status in row] for row in self.board]
             self.game_data['state'].append([state_empty, state_player, state_opponent])
+
+            # get mask
+            mask = self.generate_mask()
+            self.game_data['mask'].append(mask)
 
             # make one-hot policy
             policy = [[0 for _ in range(S)] for _ in range(S)]
@@ -200,7 +205,7 @@ class MyMCTS(MCTS):
         self.save_data = mcts_cfg['save_data']
         self.data_path = mcts_cfg['data_path']
         if self.save_data:
-            self.game_data = {'state': [], 'policy': [], 'value': []}
+            self.game_data = {'state': [], 'mask': [], 'policy': [], 'value': []}
             self.total_move_cnt = 0
         
         self.use_model = mcts_cfg['use_model']
@@ -241,6 +246,7 @@ class MyMCTS(MCTS):
             # record game data
             if self.save_data:
                 self.game_data['state'] += self.copied_game.game_data['state']
+                self.game_data['mask'] += self.copied_game.game_data['mask']
                 self.game_data['policy'] += self.copied_game.game_data['policy']
                 winner = self.copied_game.winner()[0]
                 players = self.copied_game.game_data['player']
@@ -252,7 +258,8 @@ class MyMCTS(MCTS):
 
     def self_play(self, iterations: int = 1) -> None:
         if self.save_data:
-            self.game_data = {'state': [], 'policy': [], 'value': []}
+            for key in self.game_data:
+                self.game_data[key] = []
             self.total_move_cnt = 0
         
         desc = "Training" if self.training is True else "Evaluating"

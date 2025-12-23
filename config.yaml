@@ -3,8 +3,12 @@ use_cuda: False
 
 # for development only
 board_size: 9
+
 mcts:
   save_data: True
   data_path: "data/mcts.json"
   verbose: False
   use_model: True
+
+train:
+  data_path: "data/mcts.pt"
