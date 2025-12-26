@@ -1,14 +1,14 @@
 model_path: "model/latest.pth"
-use_cuda: False
+use_cuda: True
 
 # for development only
 board_size: 9
 
 mcts:
-  save_data: True
+  record_data: True
+  save_data: False
   data_path: "data/mcts.json"
   verbose: False
-  use_model: True
 
 train:
   data_path: "data/mcts.pt"

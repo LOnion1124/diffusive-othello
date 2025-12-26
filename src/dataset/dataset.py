@@ -23,19 +23,26 @@ class DODataset(Dataset):
             'value': self.values[idx]
         }
 
-class DatasetMaker:
-    def __init__(self):
-        mcts_data_path = cfg['mcts']['data_path']
-        with open(mcts_data_path, 'r', encoding='utf-8') as f:
-            self.mcts_data = json.load(f)
+class DODatasetMaker:
+    def __init__(self, mcts_data = None):
+        mcts_save_data = cfg['mcts']['save_data']
+
+        if mcts_data is not None:
+            self.mcts_data = mcts_data
+        elif mcts_save_data:
+            mcts_data_path = cfg['mcts']['data_path']
+            with open(mcts_data_path, 'r', encoding='utf-8') as f:
+                self.mcts_data = json.load(f)
+        
         self.data_path = cfg['train']['data_path']
 
         self.device = 'cuda' if cfg['use_cuda'] else 'cpu'
     
-    def makeDataset(self, dtype = torch.float32):
+    def make_dataset(self, dtype = torch.float32):
         states = torch.tensor(self.mcts_data['state'], dtype=dtype, device=self.device)
-        masks = torch.tensor(self.mcts_data['mask'], dtype=dtype, device=self.device)
-        policies = torch.tensor(self.mcts_data['policy'], dtype=dtype, device=self.device)
+        S = states.shape[-1]
+        masks = torch.tensor(self.mcts_data['mask'], dtype=dtype, device=self.device).view(-1, S * S)
+        policies = torch.tensor(self.mcts_data['policy'], dtype=dtype, device=self.device).view(-1, S * S)
         values = torch.tensor(self.mcts_data['value'], dtype=dtype, device=self.device)
         
         dataset = DODataset({

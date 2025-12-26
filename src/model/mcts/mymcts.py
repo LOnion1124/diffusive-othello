@@ -6,7 +6,7 @@ class DO(Game):
     def __init__(self):
         # load config
         mcts_cfg = cfg['mcts']
-        self.save_data = mcts_cfg['save_data']
+        self.record_data = mcts_cfg['record_data']
         self.verbose = mcts_cfg['verbose']
 
         # create board
@@ -24,7 +24,7 @@ class DO(Game):
         self.cur_player_id = 0
 
         # selfplay data
-        if self.save_data:
+        if self.record_data:
             self.game_data = {'state': [], 'mask': [], 'policy': [], 'player': []}
             self.move_cnt = 0
 
@@ -108,8 +108,8 @@ class DO(Game):
         S = self.board_size
         x, y = action // S, action % S
 
-        # save game data
-        if self.save_data:
+        # record game data
+        if self.record_data:
             self.move_cnt += 1
 
             # make 3-layer state
@@ -174,7 +174,7 @@ def choose_distributed_action(node: Node, temperature: float = 1.0) -> int:
     """
     
     if not node.children:
-        return node.rng.choice(list(node.children.keys()))
+        raise ValueError("Node has no children to choose from")
     
     n_total = sum(child.n for child in node.children.values())
     
@@ -198,17 +198,19 @@ class MyMCTS(MCTS):
     """
     A special version of MCTS enabling saving selfplay data to file
     """
-    def __init__(self, game, training = True, seed = None):
+    def __init__(self, game, training = True, seed = None, use_model = False):
         super().__init__(game, allow_transpositions=False, training=training, seed=seed)
 
         mcts_cfg = cfg['mcts']
-        self.save_data = mcts_cfg['save_data']
-        self.data_path = mcts_cfg['data_path']
-        if self.save_data:
+        self.record_data = mcts_cfg['record_data']
+        if self.record_data:
             self.game_data = {'state': [], 'mask': [], 'policy': [], 'value': []}
             self.total_move_cnt = 0
+        self.save_data = mcts_cfg['save_data']
+        if self.save_data:
+            self.data_path = mcts_cfg['data_path']
         
-        self.use_model = mcts_cfg['use_model']
+        self.use_model = use_model
         if self.use_model:
             device = "cuda" if cfg['use_cuda'] else "cpu"
             self.model = GameAI(device)
@@ -233,6 +235,7 @@ class MyMCTS(MCTS):
                         action = -1
                     else:
                         action = self.rng.choices(actions, weights=probs, k=1)[0]
+                    # Note: when using model, we skip MCTS tree traversal
                 elif len(node.children) > 0:
                     # Use temperature > 1.0 to add exploration randomness
                     action = choose_distributed_action(node, temperature=1.5)
@@ -244,20 +247,26 @@ class MyMCTS(MCTS):
             self.copied_game.render()
 
             # record game data
-            if self.save_data:
+            if self.record_data:
                 self.game_data['state'] += self.copied_game.game_data['state']
                 self.game_data['mask'] += self.copied_game.game_data['mask']
                 self.game_data['policy'] += self.copied_game.game_data['policy']
-                winner = self.copied_game.winner()[0]
+                winners = self.copied_game.winner()
                 players = self.copied_game.game_data['player']
-                values = [1 if player == winner else 0 for player in players]
+                # Handle win/loss/draw: winner gets 1, loser gets -1, draw gets 0
+                if len(winners) == 1:
+                    # One winner, assign 1 to winner and -1 to loser
+                    values = [1 if player == winners[0] else -1 for player in players]
+                else:
+                    # Draw: all players get 0
+                    values = [0 for _ in players]
                 self.game_data['value'] += values
                 self.total_move_cnt += self.copied_game.move_cnt
             
         self.copied_game = deepcopy(self.game)
 
     def self_play(self, iterations: int = 1) -> None:
-        if self.save_data:
+        if not self.training and self.record_data:
             for key in self.game_data:
                 self.game_data[key] = []
             self.total_move_cnt = 0
@@ -267,7 +276,7 @@ class MyMCTS(MCTS):
             self.step()
         
         # save game data to file
-        if not self.training and self.save_data:
+        if not self.training and self.record_data and self.save_data:
             import json
             with open(self.data_path, "w", encoding="utf-8") as f:
                 json.dump(self.game_data, f)
