@@ -101,6 +101,7 @@ class DO(Game):
         if action == -1:
             # directly switch to opponent's turn if no valid move
             self.cur_player_id = 1 - self.cur_player_id
+            self.record_data = False # stop recording move data afterward
             return
 
         player = self.players[self.cur_player_id]
