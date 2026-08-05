@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 
+from src.config import get_game_config
 from src.ui.game_controller import GameController, MODE_PVE, MODE_PVP
 from src.ui.input_controller import PygameInputController
 from src.ui.pygame_renderer import PygameRenderer
@@ -14,9 +15,10 @@ AI_COOLDOWN_MS = 300
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    game_config = get_game_config()
     parser = argparse.ArgumentParser(description="Play Diffusive Othello.")
     parser.add_argument("--mode", choices=(MODE_PVP, MODE_PVE), default=MODE_PVP)
-    parser.add_argument("--board-size", type=int, default=9)
+    parser.add_argument("--board-size", type=int, default=game_config["board_size"])
     return parser.parse_args(argv)
 
 

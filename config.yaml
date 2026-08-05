@@ -1,14 +1,40 @@
-model_path: "model/latest.pth"
-use_cuda: True
+# Core game defaults used by clients when no CLI override is provided.
+game:
+  board_size: 9
 
-# for development only
-board_size: 9
+# AI runtime, model, search, self-play, and training defaults.
+ai:
+  runtime:
+    # auto selects CUDA when torch can see a GPU, otherwise CPU.
+    device: "auto"
+    model_path: "model/latest.pth"
 
-mcts:
-  record_data: True
-  save_data: False
-  data_path: "data/mcts.json"
-  verbose: False
+  model:
+    architecture: "alphanet"
+    version: "alphanet-v1"
+    board_size: 9
+    in_channels: 3
+    num_filters: 64
+    num_res_blocks: 3
 
-train:
-  data_path: "data/mcts.pt"
+  mcts:
+    num_simulations: 64
+    c_puct: 1.5
+    dirichlet_alpha: 0.3
+    dirichlet_epsilon: 0.25
+    add_root_noise: true
+
+  self_play:
+    output_path: "data/selfplay.pt"
+    games: 100
+    temperature: 1.0
+    temperature_drop_move: 20
+    seed:
+
+  train:
+    dataset_path: "data/selfplay.pt"
+    output_path: "model/latest.pth"
+    epochs: 10
+    batch_size: 128
+    lr: 0.001
+    weight_decay: 0.0001

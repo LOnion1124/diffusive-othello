@@ -1,208 +1,226 @@
+"""Self-play data generation for the AlphaZero-style training pipeline."""
+
+from __future__ import annotations
+
+import argparse
+import random
+from dataclasses import dataclass
+from pathlib import Path
+
 import torch
+
+from src.dataset.dataset import DODataset, make_dataset, save_dataset, validate_dataset
+from src.config import get_ai_config, get_alphanet_kwargs, resolve_torch_device
+from src.game.state import (
+    GameState,
+    apply_move,
+    encode_state,
+    is_terminal,
+    legal_mask,
+    legal_moves,
+    new_game,
+    pass_turn,
+    winner,
+)
 from src.model.alphanet.network import AlphaNet
-from src.game.logic import GameLogic
-from src.game.state import apply_move, encode_state, legal_mask, state_from_board
-from torch.utils.data import Dataset, DataLoader
+from src.model.mcts.mymcts import (
+    AlphaZeroMCTS,
+    MCTSConfig,
+    NeuralEvaluator,
+    UniformEvaluator,
+    choose_action_from_distribution,
+)
 
-class MoveData:
-    def __init__(
-            self,
-            player: int,
-            board: list[list[int]],
-            pos: tuple[int, int] = None,
-            device = "cuda"
-        ) -> None:
-        self.player = player
-        self.game_state = state_from_board(board, current_player=player)
-        self.board = torch.tensor(board, dtype=torch.get_default_dtype(), device=device)
 
-        # state: (3, size, size), [empty; own; opponent]
-        self.state = torch.tensor(
-            encode_state(self.game_state, player),
-            dtype=torch.get_default_dtype(),
-            device=device,
+@dataclass(frozen=True)
+class SelfPlayConfig:
+    board_size: int = 9
+    games: int = 1
+    num_simulations: int = 64
+    c_puct: float = 1.5
+    dirichlet_alpha: float = 0.3
+    dirichlet_epsilon: float = 0.25
+    temperature: float = 1.0
+    temperature_drop_move: int = 20
+    seed: int | None = None
+    add_root_noise: bool = True
+
+
+@dataclass
+class RecordedSample:
+    state: list[list[list[int]]]
+    legal_mask: list[bool]
+    policy: list[float]
+    player: int
+
+
+def generate_self_play_dataset(
+    *,
+    model: torch.nn.Module | None = None,
+    device: str = "cpu",
+    config: SelfPlayConfig | None = None,
+    save_path: str | Path | None = None,
+) -> DODataset:
+    config = config or SelfPlayConfig()
+    rng = random.Random(config.seed)
+    evaluator = NeuralEvaluator(model, device=device) if model is not None else UniformEvaluator()
+
+    states: list[torch.Tensor] = []
+    legal_masks: list[torch.Tensor] = []
+    policies: list[torch.Tensor] = []
+    values: list[float] = []
+
+    for game_index in range(config.games):
+        game_rng = random.Random(rng.randrange(2**63))
+        samples, game_winner = play_self_play_game(
+            evaluator=evaluator,
+            config=config,
+            rng=game_rng,
         )
+        for sample in samples:
+            states.append(torch.tensor(sample.state, dtype=torch.float32))
+            legal_masks.append(torch.tensor(sample.legal_mask, dtype=torch.bool))
+            policies.append(torch.tensor(sample.policy, dtype=torch.float32))
+            if game_winner == 0:
+                values.append(0.0)
+            else:
+                values.append(1.0 if game_winner == sample.player else -1.0)
 
-        self.mask = torch.tensor(
-            legal_mask(self.game_state, player),
-            dtype=torch.bool,
-            device=device,
-        )
+    if not states:
+        raise ValueError("Self-play produced no trainable samples.")
 
-        self.policy = None
-        if pos is not None:
-            # get policy from position
-            self.policy = torch.zeros_like(self.board)
-            x, y = pos
-            self.policy[x, y] = 1 # size * size one-hot
-            self.policy = self.policy.view(-1) # (size*size, )
-        
-        # value
-        # assess value of current state (unrelated to move pos)
-        # not the final value of this move (will be updated based on game ending)
-        size = self.board.shape[0]
-        num_grids = size * size
-        piece_cnt = self.state.view(3, -1).sum(dim=-1) # (3, )
-        own_rate = piece_cnt[1].item() / num_grids
-        opp_rate = piece_cnt[2].item() / num_grids
-        self.value = own_rate * (1 - opp_rate) # scalar, always positive
-
-class GameRecorder:
-    def __init__(self) -> None:
-        self.num_moves = 0 # n
-
-        self.states = [] # state for n moves, n * (3, size, size)
-        self.masks = [] # mask for n moves, n * (size, size)
-        self.policies = [] # policy for n moves, n * (size, size)
-
-        self.player_turns = [] # player for each move
-        self.values = [] # value for n moves, n scalar
-    
-    def recordMove(self, move: MoveData) -> None:
-        self.num_moves += 1
-
-        self.states.append(move.state)
-        self.masks.append(move.mask)
-        self.policies.append(move.policy)
-        self.values.append(move.value)
-
-        self.player_turns.append(move.player)
-    
-    def recordEnding(self, winner: int) -> None:
-        # game ending (0: draw, 1: player1 win, -1: player2 win)
-
-        # first stack datas into one tensor
-        self.states = torch.stack(self.states) # (n, 3, size, size)
-        self.masks = torch.stack(self.masks) # (n, size, size)
-        self.policies = torch.stack(self.policies) # (n, size, size)
-        self.values = torch.tensor(self.values) # was list of float, now (n, )
-
-        # adjust each move value based on game ending by multiplying an ending factor
-        # draw: 1, win: 2, lose: 0.5
-        player_turns = torch.tensor(self.player_turns)
-        if winner != 0: # not draw
-            winner_side = player_turns == winner
-            loser_side = player_turns == -winner
-            ending_factor = torch.ones(self.num_moves)
-            ending_factor[winner_side] = 2.0
-            ending_factor[loser_side] = 0.5
-            self.values = self.values * ending_factor
-        # normalize to [0, 1] using min-max
-        min_val = self.values.min()
-        max_val = self.values.max()
-        if max_val > min_val:
-            self.values = (self.values - min_val) / (max_val - min_val)
-        else:
-            self.values = torch.zeros_like(self.values)
-
-class OthelloDataset(Dataset):
-    def __init__(self, recorders: list[GameRecorder]):
-        self.states = []
-        self.masks = []
-        self.policies = []
-        self.values = []
-        for recorder in recorders:
-            self.states.append(recorder.states)
-            self.masks.append(recorder.masks)
-            self.policies.append(recorder.policies)
-            self.values.append(recorder.values)
-
-        # # switch to tensor
-        self.states = torch.concat(self.states, dim=0) # (N, 3, size, size) do not flat for CNN architecture
-        self.masks = torch.concat(self.masks, dim=0)
-        self.policies = torch.concat(self.policies, dim=0)
-        self.values = torch.concat(self.values, dim=0) # (N, )
-
-    def __len__(self):
-        return self.states.shape[0]
-
-    def __getitem__(self, idx):
-        return {
-            'state': self.states[idx],
-            'mask': self.masks[idx],
-            'policy': self.policies[idx],
-            'value': self.values[idx]
-        }
-
-def selfPlayOneGame(model: AlphaNet, device: str = "cuda") -> GameRecorder:
-    model.eval()
-    logic = GameLogic()
-    recorder = GameRecorder()
-    logic.startGame()
-
-    while logic.state == "game":
-        if not logic.board.canMove(1) and not logic.board.canMove(-1):
-            logic.endGame()
-            break
-
-        if logic.game_state == "player1" and not logic.board.canMove(1):
-            logic.switchTurn()
-            continue
-
-        if logic.game_state == "player2" and not logic.board.canMove(-1):
-            logic.switchTurn()
-            continue
-
-        player = 1 if logic.game_state == "player1" else -1
-        board = logic.board.getGrids()
-        dummy_move = MoveData(player, board, device=device) # to get current board mask
-        mask = dummy_move.mask # (size * size, )
-
-        # when producing train data, we choose the max value position for each move
-        # this is for reinforcement-like training logic
-        # so we'll try all possible moves here
-        choices = {} # dict of pos: tuple(int, int) -> value (float)
-        size = len(board)
-        for i in range(size):
-            for j in range(size):
-                if mask[i * size + j] == False:
-                    continue
-                board_try = apply_move(dummy_move.game_state, player, (i, j)).state.board
-                move_try = MoveData(player, board_try, device=device)
-                state_try, mask_try = move_try.state, move_try.mask
-                with torch.no_grad():
-                    _, value_try = model.forward(x=state_try.unsqueeze(0), legal_mask=mask_try.unsqueeze(0))
-                choices[(i, j)] = float(value_try.squeeze().item()) if torch.is_tensor(value_try) else float(value_try)
-
-        # pick the position with the highest value
-        pos = max(choices.items(), key=lambda kv: kv[1])[0]
-
-        logic.board.move(player, pos=pos)
-        move = MoveData(player, board, pos, device=device)
-        recorder.recordMove(move)
-        logic.switchTurn()
-
-    winner = logic.winner
-    recorder.recordEnding(winner)
-
-    return recorder
-
-def selfPlay(
-        model: AlphaNet,
-        num_play: int = 1,
-        save_to_file: bool = False,
-        file_name: str = "dataset.pt",
-        device: str = "cuda",
-        verbose: bool = False
-) -> OthelloDataset:
-    game_list = []
-    for i in range(num_play):
-        game = selfPlayOneGame(model, device)
-        game_list.append(game)
-        if verbose and (i + 1) % (max(num_play // 5, 1)) == 0:
-            print(f"playing... {i + 1}/{num_play}")
-    if verbose:
-        print("done")
-    dataset = OthelloDataset(game_list)
-    if save_to_file:
-        torch.save(dataset, file_name)
+    dataset = make_dataset(
+        torch.stack(states),
+        torch.stack(legal_masks),
+        torch.stack(policies),
+        torch.tensor(values, dtype=torch.float32),
+        board_size=config.board_size,
+    )
+    validate_dataset(dataset)
+    if save_path is not None:
+        save_dataset(dataset, save_path)
     return dataset
 
+
+def play_self_play_game(
+    *,
+    evaluator: UniformEvaluator | NeuralEvaluator,
+    config: SelfPlayConfig,
+    rng: random.Random,
+) -> tuple[list[RecordedSample], int]:
+    state = new_game(config.board_size)
+    samples: list[RecordedSample] = []
+    move_index = 0
+    mcts = AlphaZeroMCTS(
+        evaluator=evaluator,
+        config=MCTSConfig(
+            num_simulations=config.num_simulations,
+            c_puct=config.c_puct,
+            dirichlet_alpha=config.dirichlet_alpha,
+            dirichlet_epsilon=config.dirichlet_epsilon,
+        ),
+        rng=rng,
+    )
+
+    while not is_terminal(state):
+        player = state.current_player
+        if not legal_moves(state, player):
+            state = pass_turn(state).state
+            continue
+
+        root = mcts.search(state, add_root_noise=config.add_root_noise)
+        search_temperature = config.temperature if move_index < config.temperature_drop_move else 0.0
+        policy = mcts.visit_distribution(root, temperature=1.0)
+        action_distribution = mcts.visit_distribution(root, temperature=search_temperature)
+        action = choose_action_from_distribution(
+            action_distribution,
+            temperature=1.0,
+            rng=rng,
+        )
+
+        mask = legal_mask(state, player)
+        if not mask[action]:
+            raise RuntimeError("MCTS selected an illegal move.")
+
+        samples.append(
+            RecordedSample(
+                state=encode_state(state, player),
+                legal_mask=mask,
+                policy=policy,
+                player=player,
+            )
+        )
+
+        size = state.size
+        state = apply_move(state, player, (action // size, action % size)).state
+        move_index += 1
+
+    return samples, winner(state)
+
+
+def load_model_for_self_play(
+    checkpoint: str | Path | None,
+    *,
+    board_size: int,
+    device: str,
+    model_kwargs: dict[str, int] | None = None,
+) -> AlphaNet | None:
+    if checkpoint is None:
+        return None
+    kwargs = dict(model_kwargs or {})
+    kwargs["board_size"] = board_size
+    model = AlphaNet(**kwargs).to(device)
+    state = torch.load(Path(checkpoint), map_location=device, weights_only=False)
+    if isinstance(state, dict) and "model_state_dict" in state:
+        state = state["model_state_dict"]
+    model.load_state_dict(state)
+    return model
+
+
+def main() -> None:
+    ai_config = get_ai_config()
+    model_config = get_alphanet_kwargs()
+    mcts_config = ai_config["mcts"]
+    self_play_config = ai_config["self_play"]
+    runtime_config = ai_config["runtime"]
+
+    parser = argparse.ArgumentParser(description="Generate AlphaZero-style self-play data.")
+    parser.add_argument("--output", default=self_play_config["output_path"])
+    parser.add_argument("--checkpoint", default=None)
+    parser.add_argument("--board-size", type=int, default=model_config["board_size"])
+    parser.add_argument("--games", type=int, default=self_play_config["games"])
+    parser.add_argument("--simulations", type=int, default=mcts_config["num_simulations"])
+    parser.add_argument("--device", default=runtime_config["device"])
+    parser.add_argument("--seed", type=int, default=self_play_config["seed"])
+    parser.add_argument("--no-root-noise", action="store_true")
+    args = parser.parse_args()
+
+    device = resolve_torch_device(args.device)
+    model = load_model_for_self_play(
+        args.checkpoint,
+        board_size=args.board_size,
+        device=device,
+        model_kwargs=model_config,
+    )
+    dataset = generate_self_play_dataset(
+        model=model,
+        device=device,
+        config=SelfPlayConfig(
+            board_size=args.board_size,
+            games=args.games,
+            num_simulations=args.simulations,
+            c_puct=mcts_config["c_puct"],
+            dirichlet_alpha=mcts_config["dirichlet_alpha"],
+            dirichlet_epsilon=mcts_config["dirichlet_epsilon"],
+            temperature=self_play_config["temperature"],
+            temperature_drop_move=self_play_config["temperature_drop_move"],
+            seed=args.seed,
+            add_root_noise=(mcts_config["add_root_noise"] and not args.no_root_noise),
+        ),
+        save_path=args.output,
+    )
+    print(f"Saved {len(dataset)} samples to {args.output}")
+
+
 if __name__ == "__main__":
-    model = AlphaNet().to("cuda")
-    dataset = selfPlay(model, num_play=5, save_to_file=True, verbose=True)
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
-    for batch in dataloader:
-        print(batch['state'].shape, batch['mask'].shape, batch['policy'].shape, batch['value'].shape)
-        # print(batch['mask'][0:8])
-        break
+    main()

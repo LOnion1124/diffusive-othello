@@ -1,4 +1,3 @@
 torch>=2.0
 numpy>=1.26
 tqdm>=4.66
-mcts-simple>=1.1
