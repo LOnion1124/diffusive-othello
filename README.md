@@ -38,6 +38,8 @@ python gui.py --mode PVE
 python gui.py --mode PVP
 ```
 
+PVP only needs the minimal dependencies in `requirements.txt`. PVE loads the AI stack only when the AI first moves; if the model or optional AI dependencies are unavailable, the game reports the error in the terminal and uses a simple legal-move fallback.
+
 A command-line interface is also provided, but only supports 2-player mode:
 
 ```sh

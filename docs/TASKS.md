@@ -125,6 +125,8 @@ Acceptance criteria:
 
 Goal: keep the desktop game usable while decoupling it from AI and training code.
 
+Status: implemented. The desktop client now enters through thin `gui.py`, with game flow in `src/ui/game_controller.py`, input mapping in `src/ui/input_controller.py`, rendering in `src/ui/pygame_renderer.py`, and the pygame loop in `src/ui/pygame_app.py`. PVP no longer imports AI code, and PVE lazy-loads AI with a first-legal-move fallback when inference cannot run.
+
 Tasks:
 
 - Move pygame app code into a package such as `src/ui/pygame_app.py`.
