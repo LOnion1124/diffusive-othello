@@ -1,6 +1,6 @@
 import torch
 from src.model.alphanet.network import AlphaNet
-from src.selfplay.selfplay import MoveData
+from src.game.state import encode_state, legal_mask, state_from_board
 from src.config import cfg
 
 class GameAI:
@@ -14,11 +14,16 @@ class GameAI:
     def inference(self, board: list[list[int]], player: int):
         # board: provided by logic.board.getGrids()
         board_size = len(board)
-        # translate board
-        dummy_move = MoveData(player, board, device=self.device)
-        state, mask = (
-            dummy_move.state,
-            dummy_move.mask
+        game_state = state_from_board(board, current_player=player)
+        state = torch.tensor(
+            encode_state(game_state, player),
+            dtype=torch.get_default_dtype(),
+            device=self.device,
+        )
+        mask = torch.tensor(
+            legal_mask(game_state, player),
+            dtype=torch.bool,
+            device=self.device,
         )
         
         self.model.eval()

@@ -2,6 +2,15 @@ from mcts_simple import *
 from tqdm import tqdm
 from src.config import cfg, args
 from src.model.inference import GameAI
+from src.game.state import (
+    apply_move,
+    encode_state,
+    is_terminal,
+    legal_mask,
+    new_game,
+    pass_turn,
+    score,
+)
 
 class DO(Game):
     def __init__(self):
@@ -10,15 +19,9 @@ class DO(Game):
         self.record_data = mcts_cfg['record_data']
         self.verbose = mcts_cfg['verbose']
 
-        # create board
         S = cfg['board_size']
         self.board_size = S
-        self.board = [[0 for _ in range(S)] for _ in range(S)]
-        # initial pieces
-        self.board[0][0] = 1
-        self.board[0][S - 1] = 1
-        self.board[S - 1][0] = -1
-        self.board[S - 1][S - 1] = -1
+        self.state = new_game(S)
 
         # player symbol and ID
         self.players = [1, -1]
@@ -31,11 +34,12 @@ class DO(Game):
 
     def board2str(self):
         S = self.board_size
-        first_line = '|'.join(" O " if num == 1 else (" X " if num == -1 else "   ") for num in self.board[0])
+        board = self.get_state()
+        first_line = '|'.join(" O " if num == 1 else (" X " if num == -1 else "   ") for num in board[0])
         sep = '-' * len(first_line)
 
         lines = []
-        for i, row in enumerate(self.board):
+        for i, row in enumerate(board):
             line = '|'.join(" O " if num == 1 else (" X " if num == -1 else "   ") for num in row)
             lines.append(line)
             if i != S - 1:
@@ -50,7 +54,7 @@ class DO(Game):
             input()
 
     def get_state(self):
-        return self.board
+        return [list(row) for row in self.state.board]
 
     def number_of_players(self):
         return len(self.players)
@@ -59,34 +63,11 @@ class DO(Game):
         return self.cur_player_id
     
     def generate_mask(self):
-        S = self.board_size
         player = self.players[self.cur_player_id]
-
-        # get valid cells for current move
-        mask = [[0 for _ in range(S)] for _ in range(S)]
-        for x in range(S):
-            for y in range(S):
-                if mask[x][y] == 1:
-                    continue
-                if self.board[x][y] == player:
-                    dxs = []
-                    dys = []
-                    if x - 1 >= 0:
-                        dxs.append(-1)
-                    if x + 1 < S:
-                        dxs.append(1)
-                    if y - 1 >= 0:
-                        dys.append(-1)
-                    if y + 1 < S:
-                        dys.append(1)
-
-                    for dx in dxs:
-                        if self.board[x + dx][y] == 0:
-                            mask[x + dx][y] = 1
-                    for dy in dys:
-                        if self.board[x][y + dy] == 0:
-                            mask[x][y + dy] = 1
-        return mask
+        return [
+            [1 if cell else 0 for cell in row]
+            for row in legal_mask(self.state, player, flatten=False)
+        ]
     
     def possible_actions(self):
         res = []
@@ -101,6 +82,7 @@ class DO(Game):
     def take_action(self, action):
         if action == -1:
             # directly switch to opponent's turn if no valid move
+            self.state = pass_turn(self.state).state
             self.cur_player_id = 1 - self.cur_player_id
             self.record_data = False # stop recording move data afterward
             return
@@ -114,11 +96,7 @@ class DO(Game):
         if self.record_data:
             self.move_cnt += 1
 
-            # make 3-layer state
-            state_empty = [[1 if status == 0 else 0 for status in row] for row in self.board]
-            state_player = [[1 if status == player else 0 for status in row] for row in self.board]
-            state_opponent = [[1 if status == opponent else 0 for status in row] for row in self.board]
-            self.game_data['state'].append([state_empty, state_player, state_opponent])
+            self.game_data['state'].append(encode_state(self.state, player))
 
             # get mask
             mask = self.generate_mask()
@@ -132,33 +110,17 @@ class DO(Game):
             # record player
             self.game_data['player'].append(self.cur_player_id)
         
-        # play move and update
-
-        self.board[x][y] = player
-        dxs = [0]
-        dys = [0]
-        if x - 1 >= 0:
-            dxs.append(-1)
-        if x + 1 < S:
-            dxs.append(1)
-        if y - 1 >= 0:
-            dys.append(-1)
-        if y + 1 < S:
-            dys.append(1)
-        for dx in dxs:
-            for dy in dys:
-                if self.board[x + dx][y + dy] == opponent:
-                    self.board[x + dx][y + dy] = player
+        self.state = apply_move(self.state, player, (x, y)).state
         # update current player
         self.cur_player_id = 1 - self.cur_player_id
     
     def has_outcome(self):
-        # end game when board is full
-        return not any(0 in row for row in self.board)
+        return is_terminal(self.state)
 
     def winner(self):
-        cnt_p0 = sum(1 if status == self.players[0] else 0 for row in self.board for status in row)
-        cnt_p1 = sum(1 if status == self.players[1] else 0 for row in self.board for status in row)
+        counts = score(self.state)
+        cnt_p0 = counts[self.players[0]]
+        cnt_p1 = counts[self.players[1]]
         winners = []
         if cnt_p0 > cnt_p1:
             winners.append(0)

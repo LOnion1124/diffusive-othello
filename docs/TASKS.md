@@ -95,6 +95,8 @@ Target design:
 
 Goal: make the game implementation reliable enough for UI and AI.
 
+Status: implemented. The canonical rule API lives in `src/game/state.py`, with legacy UI/CLI compatibility through `src/game/logic.py` and CPU-only rule tests in `tests/test_game_state.py`.
+
 Tasks:
 
 - Add a canonical game state module, for example `src/game/state.py`.

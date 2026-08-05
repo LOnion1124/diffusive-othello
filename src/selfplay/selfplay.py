@@ -1,6 +1,7 @@
 import torch
 from src.model.alphanet.network import AlphaNet
 from src.game.logic import GameLogic
+from src.game.state import apply_move, encode_state, legal_mask, state_from_board
 from torch.utils.data import Dataset, DataLoader
 
 class MoveData:
@@ -12,34 +13,21 @@ class MoveData:
             device = "cuda"
         ) -> None:
         self.player = player
+        self.game_state = state_from_board(board, current_player=player)
         self.board = torch.tensor(board, dtype=torch.get_default_dtype(), device=device)
 
-        # state
-        # translate board state
-        # board: size * size 0/1/-1
-        empty = torch.zeros_like(self.board)
-        empty[self.board == 0] = 1
-        own_side = torch.zeros_like(self.board)
-        own_side[self.board == player] = 1
-        opp_side = torch.zeros_like(self.board)
-        opp_side[self.board == -player] = 1
-        self.state = torch.stack([empty, own_side, opp_side]) # (3, size, size), [empty; own; opp]
+        # state: (3, size, size), [empty; own; opponent]
+        self.state = torch.tensor(
+            encode_state(self.game_state, player),
+            dtype=torch.get_default_dtype(),
+            device=device,
+        )
 
-        # mask
-        # Create shifted versions of the board (up, down, left, right)
-        up = torch.zeros_like(self.board)
-        down = torch.zeros_like(self.board)
-        left = torch.zeros_like(self.board)
-        right = torch.zeros_like(self.board)
-        up[1:] = self.board[:-1]       # shift up
-        down[:-1] = self.board[1:]     # shift down
-        left[:, 1:] = self.board[:, :-1]   # shift left
-        right[:, :-1] = self.board[:, 1:]  # shift right
-        # any neighbor equals player
-        adj = (up == player) | (down == player) | (left == player) | (right == player)
-        # legal move = empty cell & adjacent to player
-        self.mask = (self.board == 0) & adj # (size, size), 1 if grid is possible legal move
-        self.mask = self.mask.view(-1) # (size*size, )
+        self.mask = torch.tensor(
+            legal_mask(self.game_state, player),
+            dtype=torch.bool,
+            device=device,
+        )
 
         self.policy = None
         if pos is not None:
@@ -169,9 +157,8 @@ def selfPlayOneGame(model: AlphaNet, device: str = "cuda") -> GameRecorder:
             for j in range(size):
                 if mask[i * size + j] == False:
                     continue
-                board_try = board.copy()
-                board_try[i][j] = player  # play possible move
-                move_try = MoveData(player, board_try)
+                board_try = apply_move(dummy_move.game_state, player, (i, j)).state.board
+                move_try = MoveData(player, board_try, device=device)
                 state_try, mask_try = move_try.state, move_try.mask
                 with torch.no_grad():
                     _, value_try = model.forward(x=state_try.unsqueeze(0), legal_mask=mask_try.unsqueeze(0))
