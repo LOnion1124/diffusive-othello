@@ -24,7 +24,7 @@ pip install -r requirements-ai.txt
 # CPU-only fallback:
 # pip install torch --index-url https://download.pytorch.org/whl/cpu
 # pip install -r requirements-ai.txt
-# then set `use_cuda` to `False` in config.yaml
+# then set `ai.runtime.device` to `cpu` in config.yaml
 ```
 
 ## How to Play
@@ -60,3 +60,31 @@ Whenever a player makes a valid move, all of the opponent’s pieces located in 
 This game is still under development, and its rules may be adjusted in future updates.
 
 ## Train Your Own AI
+
+AI defaults live under the `ai` section of `config.yaml`:
+
+- `ai.runtime`: inference/training device and pygame model path.
+- `ai.model`: AlphaNet architecture and board size.
+- `ai.mcts`: search parameters for self-play.
+- `ai.self_play`: generated dataset defaults.
+- `ai.train`: dataset, checkpoint, and optimizer defaults.
+
+Generate a versioned AlphaZero-style self-play dataset:
+
+```sh
+python -m src.selfplay.selfplay --output data/selfplay.pt --games 10 --simulations 64 --device cpu
+```
+
+Train a model that the current pygame PVE mode can load through `config.yaml`:
+
+```sh
+python -m src.train.train --dataset data/selfplay.pt --output model/latest.pth --epochs 5 --device cpu
+```
+
+For a tiny end-to-end smoke run, generate data during training:
+
+```sh
+python -m src.train.train --generate-games 1 --simulations 4 --epochs 1 --device cpu
+```
+
+The dataset file stores `state`, `legal_mask`, MCTS `policy` visit distributions, final `value` targets, and metadata for dataset format, rule version, board size, and model version. The training command saves a raw `AlphaNet` state dict to `model/latest.pth`, keeping it compatible with the pygame `GameAI` loader.

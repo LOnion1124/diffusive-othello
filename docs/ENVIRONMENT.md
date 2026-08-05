@@ -13,8 +13,7 @@ Verified observations:
 - `requirements-ai.txt` contains AI/training dependencies:
   - `torch`;
   - `numpy`;
-  - `tqdm`;
-  - `mcts-simple`.
+  - `tqdm`.
 - `requirements-dev.txt` contains developer/test dependencies.
 
 Recommended Windows setup:
@@ -58,8 +57,6 @@ Required dependencies:
 - pygame;
 - pyyaml;
 - torch;
-- tqdm;
-- mcts-simple for the current experimental MCTS path;
 - a valid model checkpoint.
 
 Expected behavior:
@@ -97,7 +94,7 @@ Likely profiles:
 Use separate dependency files or optional extras:
 
 - `requirements.txt`: minimal runtime for PVP desktop play.
-- `requirements-ai.txt`: torch, tqdm, MCTS, training, evaluation, and model tooling.
+- `requirements-ai.txt`: torch, tqdm, training, evaluation, and model tooling.
 - `requirements-dev.txt`: pytest and developer tooling.
 - Web dependencies should live under the web client directory if a Node-based frontend is added.
 
@@ -105,11 +102,18 @@ Use separate dependency files or optional extras:
 
 Current config loading reads `config.yaml` relative to the process working directory. This is fragile when scripts are launched from other directories.
 
+Current behavior:
+
+- `config.yaml` is resolved relative to the repository root.
+- `game.board_size` controls the default desktop board size.
+- `ai.runtime.device` controls AI device selection: `auto`, `cpu`, or `cuda`.
+- `ai.runtime.model_path` controls the pygame PVE checkpoint path.
+- `ai.self_play` and `ai.train` define generated data and checkpoint defaults.
+
 Recommended improvement:
 
-- Resolve `config.yaml` relative to the repository root or package path.
-- Allow CLI overrides for board size, model path, device, and runtime mode.
-- Store generated data and checkpoints under configurable output directories.
+- Allow CLI overrides for model path and more runtime options.
+- Store large generated data and checkpoints outside source-controlled paths by default.
 
 ## Artifact Notes
 

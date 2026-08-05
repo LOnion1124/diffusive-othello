@@ -167,6 +167,8 @@ Acceptance criteria:
 
 Goal: replace ad hoc self-play data with a consistent training dataset.
 
+Status: implemented. The canonical AlphaZero-style dataset lives in `src/dataset/dataset.py`, local PUCT MCTS lives in `src/model/mcts/mymcts.py`, self-play generation lives in `src/selfplay/selfplay.py`, and training utilities consume soft MCTS visit distributions. The old heuristic-value self-play path and external `mcts_simple` dependency have been replaced.
+
 Tasks:
 
 - Define one training sample schema:
