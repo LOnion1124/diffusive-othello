@@ -1,4 +1,5 @@
 from mcts_simple import *
+from tqdm import tqdm
 from src.config import cfg, args
 from src.model.inference import GameAI
 

@@ -10,13 +10,21 @@ Build python environment:
 # create virtual environment
 python -m venv venv
 # then activate it base on your system
-# install torch base on your CUDA version, e.g., CUDA 13.0
-pip install torch --index-url https://download.pytorch.org/whl/cu130
-# if you don't have CUDA installed, simply install torch
-# and set `use_cuda` to `False` in config.yaml
-pip install torch
-# install required packages
+# Windows PowerShell
+.\venv\Scripts\Activate.ps1
+
+# install minimal packages for PVP desktop play
 pip install -r requirements.txt
+
+# optional: install AI/training packages
+# CUDA 13.0 GPU build:
+pip install torch --index-url https://download.pytorch.org/whl/cu130
+pip install -r requirements-ai.txt
+
+# CPU-only fallback:
+# pip install torch --index-url https://download.pytorch.org/whl/cpu
+# pip install -r requirements-ai.txt
+# then set `use_cuda` to `False` in config.yaml
 ```
 
 ## How to Play
