@@ -1,10 +1,22 @@
+# Python
 __pycache__/
 venv/
-
-test.py
-
 *.pyc
 *.ipynb
+
+# PyTorch checkpoints (except models/)
 *.pt
 
+# Test
+test.py
+
+# Data
 data/
+
+# Logs
+logs/
+
+# Models — only keep latest.pth and its metadata
+models/*
+!models/latest.pth
+!models/latest.pth.json

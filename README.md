@@ -88,3 +88,49 @@ python -m src.train.train --generate-games 1 --simulations 4 --epochs 1 --device
 ```
 
 The dataset file stores `state`, `legal_mask`, MCTS `policy` visit distributions, final `value` targets, and metadata for dataset format, rule version, board size, and model version. The training command saves a raw `AlphaNet` state dict to `model/latest.pth`, keeping it compatible with the pygame `GameAI` loader.
+
+To run self-play and training as one pipeline with progress bars:
+
+```sh
+python train_pipeline.py --games 10 --simulations 64 --epochs 5 --device cpu
+```
+
+To continue from an existing model, pass it as `--checkpoint`. The pipeline uses
+that checkpoint for self-play MCTS and also initializes training from the same
+weights:
+
+```sh
+python train_pipeline.py --checkpoint model/latest.pth --dataset data/selfplay_iter01.pt --output model/latest_iter01.pth --games 100 --simulations 128 --epochs 10 --device cuda
+```
+
+Use `--init-checkpoint` to initialize training from a different model, or
+`--train-from-scratch` to use `--checkpoint` only for self-play.
+
+To run the default multi-stage schedule continuously:
+
+```sh
+python train_multistage.py --device cuda
+```
+
+The default stages write independent datasets and checkpoints:
+
+- `data/stage1_bootstrap.pt` -> `model/stage1_bootstrap.pth`
+- `data/stage2_iter01.pt` -> `model/stage2_iter01.pth`
+- `data/stage3_iter02.pt` -> `model/stage3_iter02.pth`
+- `data/stage4_iter03.pt` -> `model/stage4_iter03.pth`
+- `data/stage5_final.pt` -> `model/stage5_final.pth`
+
+Run it in the background on Windows PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force logs
+Start-Process -WindowStyle Hidden `
+  -FilePath .\venv\Scripts\python.exe `
+  -ArgumentList "-u train_multistage.py --device cuda --resume" `
+  -RedirectStandardOutput logs\train_multistage.out `
+  -RedirectStandardError logs\train_multistage.err
+```
+
+Use `--start-stage N --initial-checkpoint model\some_stage.pth` to resume from
+the middle manually, and `--promote-latest` to copy the final checkpoint to the
+configured pygame model path.
