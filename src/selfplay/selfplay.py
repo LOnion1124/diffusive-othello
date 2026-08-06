@@ -60,6 +60,8 @@ def generate_self_play_dataset(
     device: str = "cpu",
     config: SelfPlayConfig | None = None,
     save_path: str | Path | None = None,
+    show_progress: bool = False,
+    progress_desc: str = "Self-play",
 ) -> DODataset:
     config = config or SelfPlayConfig()
     rng = random.Random(config.seed)
@@ -70,7 +72,15 @@ def generate_self_play_dataset(
     policies: list[torch.Tensor] = []
     values: list[float] = []
 
-    for game_index in range(config.games):
+    game_iter = range(config.games)
+    progress_bar = None
+    if show_progress:
+        from tqdm import tqdm
+
+        progress_bar = tqdm(game_iter, desc=progress_desc, unit="game")
+        game_iter = progress_bar
+
+    for _ in game_iter:
         game_rng = random.Random(rng.randrange(2**63))
         samples, game_winner = play_self_play_game(
             evaluator=evaluator,
@@ -85,6 +95,8 @@ def generate_self_play_dataset(
                 values.append(0.0)
             else:
                 values.append(1.0 if game_winner == sample.player else -1.0)
+        if progress_bar is not None:
+            progress_bar.set_postfix(samples=len(states))
 
     if not states:
         raise ValueError("Self-play produced no trainable samples.")

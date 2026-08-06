@@ -20,6 +20,7 @@ def train_from_dataset(
     *,
     dataset_path: str | Path,
     output_path: str | Path = "model/latest.pth",
+    init_checkpoint: str | Path | None = None,
     board_size: int | None = None,
     epochs: int = 5,
     batch_size: int = 64,
@@ -27,6 +28,7 @@ def train_from_dataset(
     weight_decay: float = 1e-4,
     device: str = "cpu",
     model_kwargs: dict[str, int] | None = None,
+    show_progress: bool = False,
 ) -> dict[str, float | int | str]:
     dataset = load_dataset(dataset_path)
     validate_dataset(dataset)
@@ -41,6 +43,9 @@ def train_from_dataset(
     kwargs = dict(model_kwargs or {})
     kwargs["board_size"] = board_size
     model = AlphaNet(**kwargs).to(device)
+    if init_checkpoint is not None:
+        state_dict = load_model_state_dict(init_checkpoint, device=device)
+        model.load_state_dict(state_dict)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
@@ -48,8 +53,30 @@ def train_from_dataset(
     last_policy_loss = 0.0
     last_value_loss = 0.0
     steps = 0
-    for _ in range(epochs):
-        for batch in dataloader:
+
+    epoch_iter = range(1, epochs + 1)
+    epoch_bar = None
+    if show_progress:
+        from tqdm import tqdm
+
+        epoch_bar = tqdm(epoch_iter, desc="Training", unit="epoch")
+        epoch_iter = epoch_bar
+
+    for epoch in epoch_iter:
+        batch_iter = dataloader
+        batch_bar = None
+        if show_progress:
+            from tqdm import tqdm
+
+            batch_bar = tqdm(
+                dataloader,
+                desc=f"Epoch {epoch}/{epochs}",
+                unit="batch",
+                leave=False,
+            )
+            batch_iter = batch_bar
+
+        for batch in batch_iter:
             last_loss, last_policy_loss, last_value_loss = train_step(
                 model,
                 optimizer,
@@ -57,6 +84,19 @@ def train_from_dataset(
                 device=device,
             )
             steps += 1
+            if batch_bar is not None:
+                batch_bar.set_postfix(
+                    loss=f"{last_loss:.4f}",
+                    policy=f"{last_policy_loss:.4f}",
+                    value=f"{last_value_loss:.4f}",
+                )
+
+        if epoch_bar is not None:
+            epoch_bar.set_postfix(
+                loss=f"{last_loss:.4f}",
+                policy=f"{last_policy_loss:.4f}",
+                value=f"{last_value_loss:.4f}",
+            )
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -65,6 +105,7 @@ def train_from_dataset(
     metadata = {
         "board_size": board_size,
         "dataset_path": str(dataset_path),
+        "init_checkpoint": str(init_checkpoint) if init_checkpoint is not None else None,
         "dataset_format_version": dataset.metadata.format_version,
         "rule_version": dataset.metadata.rule_version,
         "sample_count": len(dataset),
@@ -84,6 +125,15 @@ def train_from_dataset(
     return metadata
 
 
+def load_model_state_dict(path: str | Path, *, device: str = "cpu") -> dict[str, torch.Tensor]:
+    checkpoint = torch.load(Path(path), map_location=device, weights_only=False)
+    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        checkpoint = checkpoint["model_state_dict"]
+    if not isinstance(checkpoint, dict):
+        raise ValueError("Checkpoint must contain an AlphaNet state dict.")
+    return checkpoint
+
+
 def main() -> None:
     ai_config = get_ai_config()
     model_config = get_alphanet_kwargs()
@@ -95,6 +145,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Train AlphaNet for pygame inference.")
     parser.add_argument("--dataset", default=train_config["dataset_path"])
     parser.add_argument("--output", default=train_config["output_path"])
+    parser.add_argument("--init-checkpoint", default=None)
     parser.add_argument("--board-size", type=int, default=model_config["board_size"])
     parser.add_argument("--epochs", type=int, default=train_config["epochs"])
     parser.add_argument("--batch-size", type=int, default=train_config["batch_size"])
@@ -133,6 +184,7 @@ def main() -> None:
     metadata = train_from_dataset(
         dataset_path=dataset_path,
         output_path=args.output,
+        init_checkpoint=args.init_checkpoint,
         board_size=args.board_size,
         epochs=args.epochs,
         batch_size=args.batch_size,
