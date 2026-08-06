@@ -7,6 +7,7 @@ from src.game.state import encode_state, legal_mask, new_game
 from src.model.alphanet.network import AlphaNet
 from src.model.mcts.mymcts import AlphaZeroMCTS, MCTSConfig
 from src.selfplay.selfplay import SelfPlayConfig, generate_self_play_dataset
+from src.train.train import train_from_dataset
 from src.train.train_utils import train_step
 
 
@@ -97,3 +98,37 @@ def test_train_step_accepts_soft_policy_targets():
     assert loss > 0
     assert policy_loss > 0
     assert value_loss >= 0
+
+
+def test_train_from_dataset_can_initialize_from_checkpoint(tmp_path):
+    encoded, mask, policy = _initial_sample_tensors()
+    dataset = make_dataset(
+        encoded.unsqueeze(0),
+        mask.unsqueeze(0),
+        policy.unsqueeze(0),
+        torch.tensor([0.0]),
+        board_size=4,
+    )
+    dataset_path = tmp_path / "dataset.pt"
+    save_dataset(dataset, dataset_path)
+
+    init_model = AlphaNet(board_size=4, num_filters=8, num_res_blocks=1)
+    init_path = tmp_path / "init.pth"
+    output_path = tmp_path / "continued.pth"
+    torch.save(init_model.state_dict(), init_path)
+
+    metadata = train_from_dataset(
+        dataset_path=dataset_path,
+        output_path=output_path,
+        init_checkpoint=init_path,
+        board_size=4,
+        epochs=0,
+        batch_size=1,
+        device="cpu",
+        model_kwargs={"num_filters": 8, "num_res_blocks": 1},
+    )
+
+    saved_state = torch.load(output_path, map_location="cpu", weights_only=False)
+    for name, value in init_model.state_dict().items():
+        assert torch.equal(saved_state[name], value)
+    assert metadata["init_checkpoint"] == str(init_path)
