@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Diffusive Othello 自对弈数据看板</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">DO</div>
+          <div>
+            <h1>自对弈数据</h1>
+            <p>data/ 可视化</p>
+          </div>
+        </div>
+
+        <div class="panel tight">
+          <div class="panel-title">
+            <h2>数据文件</h2>
+            <button id="refreshButton" class="icon-button" title="刷新数据文件">↻</button>
+          </div>
+          <div class="selection-row">
+            <button id="selectAllButton" class="ghost-button">全选</button>
+            <button id="clearButton" class="ghost-button">清空</button>
+          </div>
+          <div id="datasetList" class="dataset-list"></div>
+        </div>
+
+        <div class="panel tight">
+          <h2>字段覆盖</h2>
+          <div id="limitations" class="limitations"></div>
+        </div>
+      </aside>
+
+      <main class="dashboard">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Diffusive Othello</p>
+            <h2>训练样本统计看板</h2>
+          </div>
+          <div class="status-strip">
+            <span id="dataDir">data/</span>
+            <span id="loadStatus">准备加载</span>
+          </div>
+        </header>
+
+        <section id="metrics" class="metric-grid"></section>
+
+        <section class="split-grid">
+          <div class="panel">
+            <div class="panel-title">
+              <h2>胜负样本</h2>
+              <span>当前玩家视角</span>
+            </div>
+            <canvas id="outcomeChart" height="220"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-title">
+              <h2>先后手估算</h2>
+              <span>样本加权</span>
+            </div>
+            <canvas id="firstMoverChart" height="220"></canvas>
+          </div>
+        </section>
+
+        <section class="chart-grid">
+          <div class="panel">
+            <div class="panel-title">
+              <h2>合法落子数</h2>
+              <span>每个样本</span>
+            </div>
+            <canvas id="legalChart" height="230"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-title">
+              <h2>估算手数</h2>
+              <span>occupied - 4</span>
+            </div>
+            <canvas id="moveChart" height="230"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-title">
+              <h2>当前目差</h2>
+              <span>己方子数 - 对方子数</span>
+            </div>
+            <canvas id="marginChart" height="230"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-title">
+              <h2>策略集中度</h2>
+              <span>最高访问概率</span>
+            </div>
+            <canvas id="policyChart" height="230"></canvas>
+          </div>
+        </section>
+
+        <section class="heatmap-grid">
+          <div class="panel">
+            <div class="panel-title">
+              <h2>平均策略热力图</h2>
+              <span>MCTS policy</span>
+            </div>
+            <canvas id="policyHeatmap" class="heatmap" width="360" height="360"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-title">
+              <h2>合法点频率</h2>
+              <span>legal mask</span>
+            </div>
+            <canvas id="legalHeatmap" class="heatmap" width="360" height="360"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-title">
+              <h2>己方占位频率</h2>
+              <span>当前视角</span>
+            </div>
+            <canvas id="ownHeatmap" class="heatmap" width="360" height="360"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-title">
+              <h2>对方占位频率</h2>
+              <span>当前视角</span>
+            </div>
+            <canvas id="opponentHeatmap" class="heatmap" width="360" height="360"></canvas>
+          </div>
+        </section>
+
+        <section class="split-grid">
+          <div class="panel">
+            <div class="panel-title">
+              <h2>阶段胜率</h2>
+              <span>按棋盘占用率</span>
+            </div>
+            <div id="phaseTable" class="table-wrap"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">
+              <h2>文件对比</h2>
+              <span>所选数据集</span>
+            </div>
+            <div id="datasetTable" class="table-wrap"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
