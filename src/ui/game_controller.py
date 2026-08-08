@@ -46,7 +46,6 @@ class GameSnapshot:
     info: str
     mode: str
     legal_place_moves: tuple[Move, ...] = ()
-    legal_flip_moves: tuple[Move, ...] = ()
 
 
 class FirstLegalMovePolicy:
@@ -134,7 +133,6 @@ class GameController:
             PLAYER_TWO: 0,
         }
         legal_place_moves: tuple[Move, ...] = ()
-        legal_flip_moves: tuple[Move, ...] = ()
         if (
             self.phase == PHASE_GAME
             and self.state is not None
@@ -151,7 +149,6 @@ class GameController:
             info=self.info,
             mode=self.mode,
             legal_place_moves=legal_place_moves,
-            legal_flip_moves=legal_flip_moves,
         )
 
     def start_game(self) -> None:

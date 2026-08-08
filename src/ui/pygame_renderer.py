@@ -59,7 +59,6 @@ class PygameRenderer:
         self._draw_grid()
         self._draw_place_hints(snapshot)
         self._draw_pieces(snapshot)
-        self._draw_flip_hints(snapshot)
 
     def _draw_end(self, snapshot: GameSnapshot) -> None:
         self._draw_board_background(self.COLOR_PANEL)
@@ -123,28 +122,6 @@ class PygameRenderer:
                 center,
                 hint_radius,
             )
-
-    def _draw_flip_hints(self, snapshot: GameSnapshot) -> None:
-        color = (
-            self.COLOR_PLAYER1
-            if snapshot.current_player == PLAYER_ONE
-            else self.COLOR_PLAYER2
-        )
-        left, top = self.board_left_top
-        ring_radius = min(self.GRID_SIZE // 2 - 5, self.piece_radius + 5)
-        for x, y in snapshot.legal_flip_moves:
-            center = (
-                left + (self.GRID_SIZE // 2) + x * self.GRID_SIZE,
-                top + (self.GRID_SIZE // 2) + y * self.GRID_SIZE,
-            )
-            self.pygame.draw.circle(
-                self.screen,
-                self.COLOR_MOVE_HINT,
-                center,
-                ring_radius,
-                4,
-            )
-            self.pygame.draw.circle(self.screen, color, center, ring_radius - 4, 3)
 
     def _draw_title(self, text: str) -> None:
         center = (
