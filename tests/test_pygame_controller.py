@@ -33,7 +33,8 @@ def test_pvp_controller_does_not_use_ai_policy():
     assert controller.current_player == PLAYER_ONE
 
 
-def test_pve_controller_falls_back_when_ai_inference_fails():
+def test_pve_controller_falls_back_when_ai_inference_fails(monkeypatch):
+    monkeypatch.setattr("src.ui.game_controller.random.choice", lambda players: PLAYER_ONE)
     errors = []
     fallback = RecordingFallbackPolicy()
     controller = GameController(
@@ -45,13 +46,34 @@ def test_pve_controller_falls_back_when_ai_inference_fails():
     )
 
     controller.start_game()
+    assert controller.info == "Your turn."
     controller.play_human_move((0, 1))
 
     assert controller.current_player == PLAYER_TWO
+    assert controller.info == "Thinking..."
     assert controller.play_ai_turn()
     assert fallback.calls
     assert "PVE AI inference failed" in errors[0]
     assert controller.current_player == PLAYER_ONE
+
+
+def test_pve_controller_can_assign_ai_as_first_player(monkeypatch):
+    monkeypatch.setattr("src.ui.game_controller.random.choice", lambda players: PLAYER_TWO)
+    controller = GameController(
+        mode=MODE_PVE,
+        board_size=4,
+        ai_policy=FailingPolicy(),
+        fallback_policy=RecordingFallbackPolicy(),
+        error_sink=None,
+    )
+
+    controller.start_game()
+
+    assert controller.human_player == PLAYER_TWO
+    assert controller.ai_player == PLAYER_ONE
+    assert controller.current_player == PLAYER_ONE
+    assert controller.is_ai_turn
+    assert controller.info == "Thinking..."
 
 
 def test_unknown_ui_mode_is_rejected():

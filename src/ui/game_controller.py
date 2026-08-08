@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from typing import Callable, Protocol
 
@@ -9,6 +10,7 @@ from src.game.state import (
     EMPTY,
     PLAYER_ONE,
     PLAYER_TWO,
+    PLAYERS,
     GameState,
     Move,
     apply_move,
@@ -108,6 +110,8 @@ class GameController:
         self.mode = normalized_mode
         self.board_size = board_size
         self.player_names = {PLAYER_ONE: "Player1", PLAYER_TWO: "Player2"}
+        self.human_player = PLAYER_ONE
+        self.ai_player = PLAYER_TWO
         self.ai_policy = ai_policy if ai_policy is not None else LazyAiPolicy()
         self.fallback_policy = (
             fallback_policy if fallback_policy is not None else FirstLegalMovePolicy()
@@ -153,10 +157,16 @@ class GameController:
 
     def start_game(self) -> None:
         self.state = new_game(self.board_size)
+        if self.mode == MODE_PVE:
+            self.human_player = random.choice(PLAYERS)
+            self.ai_player = -self.human_player
+        else:
+            self.human_player = PLAYER_ONE
+            self.ai_player = PLAYER_TWO
         self.phase = PHASE_GAME
         self.winner = EMPTY
         self.winner_name = ""
-        self.info = f"{self.player_names[self.current_player]}'s turn."
+        self.info = self._turn_info(self.current_player)
         self._settle_turn()
 
     def handle_click(self, clicked: bool, move: Move | None = None) -> bool:
@@ -214,7 +224,7 @@ class GameController:
         return (
             self.phase == PHASE_GAME
             and self.mode == MODE_PVE
-            and self.current_player == PLAYER_TWO
+            and self.current_player == self.ai_player
         )
 
     def _settle_turn(self, *, keep_existing_info: bool = False) -> None:
@@ -236,7 +246,12 @@ class GameController:
             return
 
         if not keep_existing_info:
-            self.info = f"{self.player_names[player]}'s turn."
+            self.info = self._turn_info(player)
+
+    def _turn_info(self, player: int) -> str:
+        if self.mode == MODE_PVE:
+            return "Thinking..." if player == self.ai_player else "Your turn."
+        return f"{self.player_names[player]}'s turn."
 
     def _is_terminal(self) -> bool:
         if self.state is None:

@@ -48,9 +48,13 @@ def main(argv: list[str] | None = None) -> int:
             if pointer.quit_requested:
                 return 0
 
+            previous_phase = controller.phase
             previous_player = controller.current_player
             controller.handle_click(pointer.clicked, pointer.move)
-            if controller.current_player != previous_player:
+            if (
+                controller.phase != previous_phase
+                or controller.current_player != previous_player
+            ):
                 ai_ready_at = pygame.time.get_ticks()
 
             if (
