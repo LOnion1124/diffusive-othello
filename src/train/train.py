@@ -163,6 +163,8 @@ def main() -> None:
     parser.add_argument("--generate-games", type=int, default=0)
     parser.add_argument("--generated-dataset", default=self_play_config["output_path"])
     parser.add_argument("--simulations", type=int, default=mcts_config["num_simulations"])
+    parser.add_argument("--self-play-batch-size", type=int, default=self_play_config["batch_size"])
+    parser.add_argument("--self-play-workers", type=int, default=self_play_config["workers"])
     parser.add_argument("--seed", type=int, default=self_play_config["seed"])
     add_alphanet_model_args(parser, model_config)
     args = parser.parse_args()
@@ -185,7 +187,10 @@ def main() -> None:
                 seed=args.seed,
                 add_root_noise=mcts_config["add_root_noise"],
                 model_version=ai_config["model"]["version"],
+                batch_size=args.self_play_batch_size,
+                workers=args.self_play_workers,
             ),
+            model_kwargs=model_config,
         )
         save_dataset(dataset, args.generated_dataset)
         dataset_path = args.generated_dataset

@@ -79,6 +79,12 @@ Expected behavior:
 - Training should run through command-line scripts, not notebooks only.
 - All training dependencies should be documented and installable.
 - MCTS should not depend on an undeclared external package.
+- Self-play can batch multiple active games in one process with
+  `--self-play-batch-size`, which is the preferred CUDA path because it batches
+  neural-network leaf evaluations.
+- Self-play can shard games across processes with `--self-play-workers`, which
+  is most useful for CPU generation. On a single GPU, prefer one worker and a
+  larger self-play batch to avoid loading one model per process.
 
 ### Web Game
 

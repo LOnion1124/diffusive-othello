@@ -5,7 +5,7 @@ torch = pytest.importorskip("torch")
 from src.train.dataset import load_dataset, make_dataset, save_dataset, validate_dataset
 from src.game.state import encode_state, legal_mask, new_game
 from src.model.alphanet.network import AlphaNet
-from src.model.mcts.mymcts import AlphaZeroMCTS, MCTSConfig
+from src.model.mcts.mymcts import AlphaZeroMCTS, MCTSConfig, NeuralEvaluator
 from src.train.selfplay import SelfPlayConfig, generate_self_play_dataset
 from src.train.train import train_from_dataset
 from src.train.train_utils import train_step
@@ -67,6 +67,38 @@ def test_local_mcts_returns_legal_visit_distribution():
     assert torch.all(distribution[~mask] == 0)
 
 
+def test_batched_mcts_returns_legal_visit_distributions():
+    states = [new_game(4), new_game(4)]
+    mcts = AlphaZeroMCTS(config=MCTSConfig(num_simulations=4))
+    roots = mcts.search_batch(states)
+
+    assert len(roots) == 2
+    for state, root in zip(states, roots):
+        distribution = torch.tensor(mcts.visit_distribution(root))
+        mask = torch.tensor(legal_mask(state, state.current_player))
+
+        assert torch.isclose(distribution.sum(), torch.tensor(1.0))
+        assert torch.all(distribution[~mask] == 0)
+
+
+def test_neural_evaluator_supports_batch_requests():
+    states = [new_game(4), new_game(4)]
+    model = AlphaNet(board_size=4, num_filters=8, num_res_blocks=1)
+    evaluator = NeuralEvaluator(model, device="cpu")
+    requests = [
+        (state, state.current_player, legal_mask(state, state.current_player))
+        for state in states
+    ]
+
+    results = evaluator.evaluate_batch(requests)
+
+    assert len(results) == 2
+    for priors, value in results:
+        assert len(priors) == 16
+        assert -1.0 <= value <= 1.0
+        assert pytest.approx(sum(priors), abs=1e-5) == 1.0
+
+
 def test_self_play_generates_valid_dataset():
     dataset = generate_self_play_dataset(
         config=SelfPlayConfig(
@@ -75,6 +107,38 @@ def test_self_play_generates_valid_dataset():
             num_simulations=2,
             seed=1,
             add_root_noise=False,
+        )
+    )
+
+    validate_dataset(dataset)
+    assert len(dataset) > 0
+
+
+def test_batched_self_play_generates_valid_dataset():
+    dataset = generate_self_play_dataset(
+        config=SelfPlayConfig(
+            board_size=4,
+            games=2,
+            num_simulations=2,
+            seed=1,
+            add_root_noise=False,
+            batch_size=2,
+        )
+    )
+
+    validate_dataset(dataset)
+    assert len(dataset) > 0
+
+
+def test_worker_self_play_generates_valid_dataset():
+    dataset = generate_self_play_dataset(
+        config=SelfPlayConfig(
+            board_size=4,
+            games=2,
+            num_simulations=1,
+            seed=1,
+            add_root_noise=False,
+            workers=2,
         )
     )
 

@@ -47,6 +47,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default=runtime_config["device"])
     parser.add_argument("--games", type=int, default=self_play_config["games"])
     parser.add_argument("--simulations", type=int, default=mcts_config["num_simulations"])
+    parser.add_argument("--self-play-batch-size", type=int, default=self_play_config["batch_size"])
+    parser.add_argument("--self-play-workers", type=int, default=self_play_config["workers"])
     parser.add_argument("--epochs", type=int, default=train_config["epochs"])
     parser.add_argument("--batch-size", type=int, default=train_config["batch_size"])
     parser.add_argument("--lr", type=float, default=train_config["lr"])
@@ -103,7 +105,10 @@ def main() -> int:
             seed=args.seed,
             add_root_noise=(mcts_config["add_root_noise"] and not args.no_root_noise),
             model_version=ai_config["model"]["version"],
+            batch_size=args.self_play_batch_size,
+            workers=args.self_play_workers,
         ),
+        model_kwargs=model_config,
         save_path=args.dataset,
         show_progress=True,
         progress_desc="Self-play",

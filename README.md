@@ -66,7 +66,7 @@ AI defaults live under the `ai` section of `config.yaml`:
 - `ai.runtime`: inference/training device and pygame model path.
 - `ai.model`: AlphaNet architecture, board size, residual trunk size, and value-head hidden size.
 - `ai.mcts`: search parameters for self-play.
-- `ai.self_play`: generated dataset defaults.
+- `ai.self_play`: generated dataset defaults, including self-play batch size and worker count.
 - `ai.train`: dataset, checkpoint, and optimizer defaults.
 
 The default AlphaNet is `alphanet-v2` with `num_filters: 96`,
@@ -79,6 +79,17 @@ Generate a versioned AlphaZero-style self-play dataset:
 
 ```sh
 python -m src.train.selfplay --output data/selfplay.pt --games 10 --simulations 64 --device cpu
+```
+
+Self-play supports two speed knobs:
+
+- `--self-play-batch-size N` advances up to `N` games together in one process, batching neural-network leaf evaluations. This is the preferred CUDA path.
+- `--self-play-workers N` shards games across worker processes. This is most useful for CPU self-play; on a single GPU, prefer one worker and a larger self-play batch.
+
+Example CUDA generation with batched inference:
+
+```sh
+python -m src.train.selfplay --checkpoint models/latest.pth --output data/selfplay.pt --games 100 --simulations 128 --device cuda --self-play-batch-size 8
 ```
 
 Train a model that the current pygame PVE mode can load through `config.yaml`:
@@ -104,7 +115,7 @@ python train_pipeline.py --games 10 --simulations 64 --epochs 5 --device cpu
 Capacity can be overridden from training scripts without editing `config.yaml`:
 
 ```sh
-python train_pipeline.py --num-filters 128 --num-res-blocks 8 --value-hidden-dim 256 --games 100 --simulations 192 --epochs 10 --device cuda
+python train_pipeline.py --num-filters 128 --num-res-blocks 8 --value-hidden-dim 256 --games 100 --simulations 192 --epochs 10 --device cuda --self-play-batch-size 8
 ```
 
 To continue from an existing model, pass it as `--checkpoint`. The pipeline uses
@@ -122,6 +133,12 @@ To run the default multi-stage schedule continuously:
 
 ```sh
 python train_multistage.py --device cuda
+```
+
+For GPU training, use batched self-play to keep model inference from running as many tiny `batch=1` calls:
+
+```sh
+python train_multistage.py --device cuda --self-play-batch-size 8
 ```
 
 The default stages write independent datasets and checkpoints:

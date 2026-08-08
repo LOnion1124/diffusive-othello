@@ -193,6 +193,10 @@ Acceptance criteria:
 
 Goal: build a useful search-driven training loop.
 
+Status: implemented and optimized. Project-local MCTS now supports cached
+legal move/mask/terminal data, batched neural-network leaf evaluation, batched
+multi-game self-play, and process-level self-play sharding.
+
 Tasks:
 
 - Implement or vendor a small project-local MCTS instead of depending on missing `mcts_simple`.
@@ -201,6 +205,8 @@ Tasks:
 - Add Dirichlet noise at the root during training games.
 - Use visit-count distributions as policy targets.
 - Add temperature scheduling for early-game exploration and late-game exploitation.
+- Batch neural-network leaf evaluations across active self-play games.
+- Shard self-play games across worker processes for CPU generation.
 - Support random, heuristic, MCTS, and neural-network players for benchmarking.
 
 Acceptance criteria:

@@ -78,6 +78,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--latest-path", default=ai_config["runtime"]["model_path"])
     parser.add_argument("--manifest", default=None)
     parser.add_argument("--weight-decay", type=float, default=train_config["weight_decay"])
+    parser.add_argument("--self-play-batch-size", type=int, default=self_play_config["batch_size"])
+    parser.add_argument("--self-play-workers", type=int, default=self_play_config["workers"])
     parser.add_argument("--temperature", type=float, default=self_play_config["temperature"])
     parser.add_argument(
         "--temperature-drop-move",
@@ -167,7 +169,10 @@ def main() -> int:
                 seed=args.seed_base + stage.index,
                 add_root_noise=(mcts_config["add_root_noise"] and not args.no_root_noise),
                 model_version=ai_config["model"]["version"],
+                batch_size=args.self_play_batch_size,
+                workers=args.self_play_workers,
             ),
+            model_kwargs=model_config,
             save_path=dataset_path,
             show_progress=True,
             progress_desc=f"Stage {stage.index} self-play",

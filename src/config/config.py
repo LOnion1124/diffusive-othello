@@ -40,6 +40,8 @@ DEFAULT_CFG: dict[str, Any] = {
         "self_play": {
             "output_path": "data/selfplay.pt",
             "games": 100,
+            "batch_size": 1,
+            "workers": 1,
             "temperature": 1.0,
             "temperature_drop_move": 20,
             "seed": None,

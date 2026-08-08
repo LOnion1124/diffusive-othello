@@ -122,9 +122,15 @@ def legal_mask(
     return [mask_2d[x][y] for x in range(state.size) for y in range(state.size)]
 
 
-def apply_move(state: GameState, player: int, move: Move) -> MoveResult:
+def apply_move(
+    state: GameState,
+    player: int,
+    move: Move,
+    *,
+    validate: bool = True,
+) -> MoveResult:
     _validate_player(player)
-    if not _is_legal_move(state, player, move):
+    if validate and not _is_legal_move(state, player, move):
         raise ValueError(f"Illegal move {move} for player {player}.")
 
     x, y = move

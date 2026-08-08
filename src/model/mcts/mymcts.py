@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -14,7 +15,6 @@ from src.game.state import (
     Move,
     apply_move,
     encode_state,
-    is_terminal,
     legal_mask,
     legal_moves,
     pass_turn,
@@ -26,20 +26,45 @@ PASS_ACTION = -1
 
 
 class Evaluator(Protocol):
-    def evaluate(self, state: GameState, player: int) -> tuple[list[float], float]:
+    def evaluate(
+        self,
+        state: GameState,
+        player: int,
+        legal_mask_: list[bool] | None = None,
+    ) -> tuple[list[float], float]:
         """Return flattened policy priors and value from player's perspective."""
+
+    def evaluate_batch(
+        self,
+        requests: Sequence[tuple[GameState, int, list[bool]]],
+    ) -> list[tuple[list[float], float]]:
+        """Return priors and values for a batch of states."""
 
 
 class UniformEvaluator:
     """Legal-uniform priors and a neutral value, useful before a model exists."""
 
-    def evaluate(self, state: GameState, player: int) -> tuple[list[float], float]:
-        mask = legal_mask(state, player)
+    def evaluate(
+        self,
+        state: GameState,
+        player: int,
+        legal_mask_: list[bool] | None = None,
+    ) -> tuple[list[float], float]:
+        mask = legal_mask_ if legal_mask_ is not None else legal_mask(state, player)
         legal_count = sum(1 for allowed in mask if allowed)
         if legal_count == 0:
             return [0.0 for _ in mask], 0.0
         prob = 1.0 / legal_count
         return [prob if allowed else 0.0 for allowed in mask], 0.0
+
+    def evaluate_batch(
+        self,
+        requests: Sequence[tuple[GameState, int, list[bool]]],
+    ) -> list[tuple[list[float], float]]:
+        return [
+            self.evaluate(state, player, legal_mask_)
+            for state, player, legal_mask_ in requests
+        ]
 
 
 class NeuralEvaluator:
@@ -48,23 +73,44 @@ class NeuralEvaluator:
     def __init__(self, model: torch.nn.Module, device: str = "cpu") -> None:
         self.model = model.to(device)
         self.device = device
-
-    def evaluate(self, state: GameState, player: int) -> tuple[list[float], float]:
         self.model.eval()
-        with torch.no_grad():
+
+    def evaluate(
+        self,
+        state: GameState,
+        player: int,
+        legal_mask_: list[bool] | None = None,
+    ) -> tuple[list[float], float]:
+        mask = legal_mask_ if legal_mask_ is not None else legal_mask(state, player)
+        return self.evaluate_batch(((state, player, mask),))[0]
+
+    def evaluate_batch(
+        self,
+        requests: Sequence[tuple[GameState, int, list[bool]]],
+    ) -> list[tuple[list[float], float]]:
+        if not requests:
+            return []
+
+        with torch.inference_mode():
             encoded = torch.tensor(
-                encode_state(state, player),
+                [encode_state(state, player) for state, player, _ in requests],
                 dtype=torch.get_default_dtype(),
                 device=self.device,
-            ).unsqueeze(0)
-            mask = torch.tensor(
-                legal_mask(state, player),
+            )
+            masks = torch.tensor(
+                [legal_mask_ for _, _, legal_mask_ in requests],
                 dtype=torch.bool,
                 device=self.device,
-            ).unsqueeze(0)
-            log_policy, value = self.model(encoded, legal_mask=mask)
-            probs = log_policy.exp().squeeze(0).detach().cpu().tolist()
-        return _renormalize_legal_probs(probs, mask.squeeze(0).detach().cpu().tolist()), float(value.item())
+            )
+            log_policy, value = self.model(encoded, legal_mask=masks)
+            probs_batch = log_policy.exp().detach().cpu().tolist()
+            masks_batch = masks.detach().cpu().tolist()
+            values = value.detach().cpu().tolist()
+
+        return [
+            (_renormalize_legal_probs(probs, mask), float(value_))
+            for probs, mask, value_ in zip(probs_batch, masks_batch, values)
+        ]
 
 
 @dataclass
@@ -76,6 +122,9 @@ class SearchNode:
     value_sum: float = 0.0
     children: dict[int, "SearchNode"] = field(default_factory=dict)
     expanded: bool = False
+    legal_moves_cache: list[Move] | None = None
+    legal_mask_cache: list[bool] | None = None
+    terminal_cache: bool | None = None
 
     @property
     def value_mean(self) -> float:
@@ -118,6 +167,38 @@ class AlphaZeroMCTS:
             self._simulate(root)
         return root
 
+    def search_batch(
+        self,
+        states: Sequence[GameState],
+        *,
+        add_root_noise: bool = False,
+    ) -> list[SearchNode]:
+        roots = [
+            SearchNode(state=state, player=state.current_player)
+            for state in states
+        ]
+        self._expand_and_evaluate_batch(roots)
+        if add_root_noise:
+            for root in roots:
+                self._add_dirichlet_noise(root)
+
+        for _ in range(self.config.num_simulations):
+            pending: list[tuple[SearchNode, list[SearchNode]]] = []
+            for root in roots:
+                path = self._select_path(root)
+                leaf = path[-1]
+                if self._is_terminal_node(leaf):
+                    self._backup(path, _terminal_value(leaf.state, leaf.player))
+                elif not leaf.expanded:
+                    pending.append((leaf, path))
+
+            if pending:
+                values = self._expand_and_evaluate_batch([leaf for leaf, _ in pending])
+                for (_, path), value in zip(pending, values):
+                    self._backup(path, value)
+
+        return roots
+
     def visit_distribution(self, root: SearchNode, temperature: float = 1.0) -> list[float]:
         size = root.state.size
         distribution = [0.0 for _ in range(size * size)]
@@ -150,7 +231,7 @@ class AlphaZeroMCTS:
         return distribution
 
     def _simulate(self, node: SearchNode) -> float:
-        if is_terminal(node.state):
+        if self._is_terminal_node(node):
             value = _terminal_value(node.state, node.player)
             node.visit_count += 1
             node.value_sum += value
@@ -172,8 +253,11 @@ class AlphaZeroMCTS:
     def _expand_and_evaluate(self, node: SearchNode) -> float:
         if node.expanded:
             return node.value_mean
+        if self._is_terminal_node(node):
+            node.expanded = True
+            return _terminal_value(node.state, node.player)
 
-        moves = legal_moves(node.state, node.player)
+        moves = self._legal_moves(node)
         if not moves:
             passed_state = pass_turn(node.state).state
             node.children[PASS_ACTION] = SearchNode(
@@ -184,13 +268,13 @@ class AlphaZeroMCTS:
             node.expanded = True
             return 0.0
 
-        priors, value = self.evaluator.evaluate(node.state, node.player)
-        mask = legal_mask(node.state, node.player)
+        mask = self._legal_mask(node)
+        priors, value = self.evaluator.evaluate(node.state, node.player, mask)
         priors = _renormalize_legal_probs(priors, mask)
         size = node.state.size
         for x, y in moves:
             action = x * size + y
-            child_state = apply_move(node.state, node.player, (x, y)).state
+            child_state = apply_move(node.state, node.player, (x, y), validate=False).state
             node.children[action] = SearchNode(
                 state=child_state,
                 player=child_state.current_player,
@@ -198,6 +282,76 @@ class AlphaZeroMCTS:
             )
         node.expanded = True
         return value
+
+    def _expand_and_evaluate_batch(self, nodes: Sequence[SearchNode]) -> list[float]:
+        values: list[float | None] = [None for _ in nodes]
+        evaluable: list[SearchNode] = []
+        evaluable_indices: list[int] = []
+        requests: list[tuple[GameState, int, list[bool]]] = []
+
+        for index, node in enumerate(nodes):
+            if node.expanded:
+                values[index] = node.value_mean
+                continue
+            if self._is_terminal_node(node):
+                node.expanded = True
+                values[index] = _terminal_value(node.state, node.player)
+                continue
+
+            moves = self._legal_moves(node)
+            if not moves:
+                passed_state = pass_turn(node.state).state
+                node.children[PASS_ACTION] = SearchNode(
+                    state=passed_state,
+                    player=passed_state.current_player,
+                    prior=1.0,
+                )
+                node.expanded = True
+                values[index] = 0.0
+                continue
+
+            evaluable.append(node)
+            evaluable_indices.append(index)
+            requests.append((node.state, node.player, self._legal_mask(node)))
+
+        if requests:
+            results = self.evaluator.evaluate_batch(requests)
+            for node, index, (priors, value) in zip(evaluable, evaluable_indices, results):
+                mask = self._legal_mask(node)
+                priors = _renormalize_legal_probs(priors, mask)
+                size = node.state.size
+                for x, y in self._legal_moves(node):
+                    action = x * size + y
+                    child_state = apply_move(
+                        node.state,
+                        node.player,
+                        (x, y),
+                        validate=False,
+                    ).state
+                    node.children[action] = SearchNode(
+                        state=child_state,
+                        player=child_state.current_player,
+                        prior=priors[action],
+                    )
+                node.expanded = True
+                values[index] = value
+
+        return [float(value) for value in values]
+
+    def _select_path(self, root: SearchNode) -> list[SearchNode]:
+        path = [root]
+        node = root
+        while node.expanded and not self._is_terminal_node(node):
+            node = self._select_child(node)
+            path.append(node)
+        return path
+
+    def _backup(self, path: Sequence[SearchNode], leaf_value: float) -> None:
+        value = leaf_value
+        for node in reversed(path):
+            node.visit_count += 1
+            node.value_sum += value
+            value = -value
 
     def _select_child(self, node: SearchNode) -> SearchNode:
         if not node.children:
@@ -221,6 +375,27 @@ class AlphaZeroMCTS:
             elif abs(score_value - best_score) <= 1e-12:
                 best_children.append(child)
         return self.rng.choice(best_children)
+
+    def _legal_moves(self, node: SearchNode) -> list[Move]:
+        if node.legal_moves_cache is None:
+            node.legal_moves_cache = legal_moves(node.state, node.player)
+        return node.legal_moves_cache
+
+    def _legal_mask(self, node: SearchNode) -> list[bool]:
+        if node.legal_mask_cache is None:
+            mask = [False for _ in range(node.state.size * node.state.size)]
+            for x, y in self._legal_moves(node):
+                mask[x * node.state.size + y] = True
+            node.legal_mask_cache = mask
+        return node.legal_mask_cache
+
+    def _is_terminal_node(self, node: SearchNode) -> bool:
+        if node.terminal_cache is None:
+            if self._legal_moves(node):
+                node.terminal_cache = False
+            else:
+                node.terminal_cache = not legal_moves(node.state, -node.player)
+        return node.terminal_cache
 
     def _add_dirichlet_noise(self, root: SearchNode) -> None:
         actions = [action for action in root.children if action != PASS_ACTION]
