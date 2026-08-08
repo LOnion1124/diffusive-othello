@@ -104,29 +104,52 @@ def summarize_dataset(path: Path) -> dict[str, Any]:
         raise ValueError(f"{path.name} does not contain a dataset dict payload.")
 
     metadata = dict(payload.get("metadata") or {})
+    if metadata.get("format_version") != "az-do-dataset-v2":
+        raise ValueError(f"{path.name} is not an az-do-dataset-v2 file.")
     states = payload["states"].detach().cpu().float()
     legal_masks = payload["legal_masks"].detach().cpu().bool()
     policies = payload["policies"].detach().cpu().float()
     values = payload["values"].detach().cpu().float().view(-1)
+    sample_metadata = {
+        key: value.detach().cpu()
+        for key, value in payload["sample_metadata"].items()
+    }
+    game_metadata = {
+        key: value.detach().cpu()
+        for key, value in payload["game_metadata"].items()
+    }
 
     sample_count = int(states.shape[0])
     board_size = int(metadata.get("board_size") or states.shape[-1])
+    game_count = int(game_metadata["game_id"].numel())
     if sample_count <= 0:
         raise ValueError(f"{path.name} contains no samples.")
 
-    empties = states[:, 0].sum(dim=(1, 2))
-    own = states[:, 1].sum(dim=(1, 2))
-    opponent = states[:, 2].sum(dim=(1, 2))
+    empties = sample_metadata["empty_count"].float()
+    own = sample_metadata["own_count"].float()
+    opponent = sample_metadata["opponent_count"].float()
     occupied = own + opponent
-    move_index_est = torch.clamp(occupied - INITIAL_STONES, min=0)
-    piece_diff = own - opponent
+    ply = sample_metadata["ply"].float()
+    piece_diff = sample_metadata["current_margin"].float()
     legal_counts = legal_masks.sum(dim=1).float()
-    policy_floor = policies.clamp_min(1e-12)
-    policy_entropy = -(policy_floor * policy_floor.log()).sum(dim=1)
-    top_policy = policies.amax(dim=1)
+    policy_entropy = sample_metadata["policy_entropy"].float()
+    top_policy = sample_metadata["top_policy"].float()
+    root_value = sample_metadata["root_value"].float()
+    chosen_q = sample_metadata["chosen_q"].float()
+    root_visits = sample_metadata["root_visit_count"].clamp_min(1).float()
+    chosen_visit_share = sample_metadata["chosen_visit_count"].float() / root_visits
+    flipped_counts = sample_metadata["flipped_count"].float()
 
-    estimated_first_turn = (move_index_est.long() % 2) == 0
-    estimated_first_value = torch.where(estimated_first_turn, values, -values)
+    winners = game_metadata["winner"].long()
+    first_players = game_metadata["first_player"].long()
+    first_mover_values = torch.where(
+        winners == 0,
+        torch.zeros_like(winners, dtype=torch.float32),
+        torch.where(winners == first_players, 1.0, -1.0),
+    )
+    game_lengths = game_metadata["move_count"].float()
+    pass_counts = game_metadata["pass_count"].float()
+    final_margins = game_metadata["final_margin_p1"].float()
 
     phase_labels = _phase_labels(occupied, board_size)
     phase_summary = _phase_outcomes(phase_labels, values)
@@ -142,24 +165,38 @@ def summarize_dataset(path: Path) -> dict[str, Any]:
         "modified": stat.st_mtime,
         "metadata": metadata,
         "sampleCount": sample_count,
+        "gameCount": game_count,
         "boardSize": board_size,
         "metrics": {
             "outcomes": _outcome_counts(values),
-            "estimatedFirstMoverOutcomes": _outcome_counts(estimated_first_value),
+            "firstMoverOutcomes": _outcome_counts(first_mover_values),
             "value": _series_stats(values),
             "legalMoves": _series_stats(legal_counts),
             "policyEntropy": _series_stats(policy_entropy),
             "topPolicy": _series_stats(top_policy),
             "currentPieceDiff": _series_stats(piece_diff),
             "occupiedCells": _series_stats(occupied),
-            "estimatedMoveIndex": _series_stats(move_index_est),
+            "ply": _series_stats(ply),
+            "flippedCount": _series_stats(flipped_counts),
+            "rootValue": _series_stats(root_value),
+            "chosenQ": _series_stats(chosen_q),
+            "chosenVisitShare": _series_stats(chosen_visit_share),
+            "gameLength": _series_stats(game_lengths),
+            "passCount": _series_stats(pass_counts),
+            "finalMarginP1": _series_stats(final_margins),
         },
         "distributions": {
             "legalMoves": _int_histogram(legal_counts),
-            "estimatedMoveIndex": _int_histogram(move_index_est),
+            "ply": _int_histogram(ply),
             "currentPieceDiff": _int_histogram(piece_diff),
             "topPolicy": _range_histogram(top_policy, 0.0, 1.0, 10),
             "policyEntropy": _range_histogram(policy_entropy, 0.0, math.log(board_size * board_size), 12),
+            "flippedCount": _int_histogram(flipped_counts),
+            "chosenVisitShare": _range_histogram(chosen_visit_share, 0.0, 1.0, 10),
+            "rootValue": _range_histogram(root_value, -1.0, 1.0, 12),
+            "gameLength": _int_histogram(game_lengths),
+            "passCount": _int_histogram(pass_counts),
+            "finalMarginP1": _int_histogram(final_margins),
         },
         "phaseSummary": phase_summary,
         "heatmaps": {
@@ -168,33 +205,7 @@ def summarize_dataset(path: Path) -> dict[str, Any]:
             "own": _matrix(own_heatmap),
             "opponent": _matrix(opponent_heatmap),
         },
-        "limitations": [
-            {
-                "metric": "totalGames",
-                "label": "总对局数",
-                "reason": "当前 .pt 文件只保存训练样本，没有逐局边界。",
-            },
-            {
-                "metric": "gameMoveCounts",
-                "label": "单局总步数",
-                "reason": "缺少逐局边界；页面展示的是样本所在局面的估算手数分布。",
-            },
-            {
-                "metric": "passMoves",
-                "label": "无效/跳过步数",
-                "reason": "自对弈生成器在无合法落子时 pass，但不会把 pass 写入训练样本。",
-            },
-            {
-                "metric": "finalMargin",
-                "label": "终局目差",
-                "reason": "训练样本只有胜负值，没有终局棋盘；页面展示的是当前局面目差。",
-            },
-            {
-                "metric": "firstSecondExact",
-                "label": "精确先后手胜率",
-                "reason": "样本使用当前玩家视角编码，没有保存绝对玩家；先后手统计按估算手数奇偶样本加权。",
-            },
-        ],
+        "limitations": [],
     }
     _SUMMARY_CACHE[key] = summary
     return summary
@@ -205,18 +216,20 @@ def combine_summaries(summaries: list[dict[str, Any]]) -> dict[str, Any]:
         return {"sampleCount": 0}
 
     sample_count = sum(s["sampleCount"] for s in summaries)
+    game_count = sum(s["gameCount"] for s in summaries)
     board_sizes = sorted({s["boardSize"] for s in summaries})
 
     combined = {
         "name": "selected",
         "datasetCount": len(summaries),
         "sampleCount": sample_count,
+        "gameCount": game_count,
         "boardSize": board_sizes[0] if len(board_sizes) == 1 else None,
         "boardSizes": board_sizes,
         "metrics": {
             "outcomes": _combine_counts([s["metrics"]["outcomes"] for s in summaries]),
-            "estimatedFirstMoverOutcomes": _combine_counts(
-                [s["metrics"]["estimatedFirstMoverOutcomes"] for s in summaries]
+            "firstMoverOutcomes": _combine_counts(
+                [s["metrics"]["firstMoverOutcomes"] for s in summaries]
             ),
             "value": _combine_series_stats(summaries, "value"),
             "legalMoves": _combine_series_stats(summaries, "legalMoves"),
@@ -224,14 +237,27 @@ def combine_summaries(summaries: list[dict[str, Any]]) -> dict[str, Any]:
             "topPolicy": _combine_series_stats(summaries, "topPolicy"),
             "currentPieceDiff": _combine_series_stats(summaries, "currentPieceDiff"),
             "occupiedCells": _combine_series_stats(summaries, "occupiedCells"),
-            "estimatedMoveIndex": _combine_series_stats(summaries, "estimatedMoveIndex"),
+            "ply": _combine_series_stats(summaries, "ply"),
+            "flippedCount": _combine_series_stats(summaries, "flippedCount"),
+            "rootValue": _combine_series_stats(summaries, "rootValue"),
+            "chosenQ": _combine_series_stats(summaries, "chosenQ"),
+            "chosenVisitShare": _combine_series_stats(summaries, "chosenVisitShare"),
+            "gameLength": _combine_series_stats(summaries, "gameLength", count_key="gameCount"),
+            "passCount": _combine_series_stats(summaries, "passCount", count_key="gameCount"),
+            "finalMarginP1": _combine_series_stats(summaries, "finalMarginP1", count_key="gameCount"),
         },
         "distributions": {
             "legalMoves": _combine_distribution(summaries, "legalMoves"),
-            "estimatedMoveIndex": _combine_distribution(summaries, "estimatedMoveIndex"),
+            "ply": _combine_distribution(summaries, "ply"),
             "currentPieceDiff": _combine_distribution(summaries, "currentPieceDiff"),
             "topPolicy": _combine_distribution(summaries, "topPolicy"),
             "policyEntropy": _combine_distribution(summaries, "policyEntropy"),
+            "flippedCount": _combine_distribution(summaries, "flippedCount"),
+            "chosenVisitShare": _combine_distribution(summaries, "chosenVisitShare"),
+            "rootValue": _combine_distribution(summaries, "rootValue"),
+            "gameLength": _combine_distribution(summaries, "gameLength"),
+            "passCount": _combine_distribution(summaries, "passCount"),
+            "finalMarginP1": _combine_distribution(summaries, "finalMarginP1"),
         },
         "phaseSummary": _combine_phase_summary(summaries),
         "heatmaps": _combine_heatmaps(summaries),
@@ -259,8 +285,13 @@ def _series_stats(values: Any) -> dict[str, float]:
     }
 
 
-def _combine_series_stats(summaries: list[dict[str, Any]], key: str) -> dict[str, float]:
-    total = sum(s["sampleCount"] for s in summaries)
+def _combine_series_stats(
+    summaries: list[dict[str, Any]],
+    key: str,
+    *,
+    count_key: str = "sampleCount",
+) -> dict[str, float]:
+    total = sum(s[count_key] for s in summaries)
     if total == 0:
         return {}
     values = [s["metrics"][key] for s in summaries]

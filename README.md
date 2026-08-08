@@ -104,7 +104,19 @@ For a tiny end-to-end smoke run, generate data during training:
 python -m src.train.train --generate-games 1 --simulations 4 --epochs 1 --device cpu
 ```
 
-The dataset file stores `state`, `legal_mask`, MCTS `policy` visit distributions, final `value` targets, and metadata for dataset format, rule version, board size, and model version. The training command saves a raw `AlphaNet` state dict to `models/latest.pth`, keeping it compatible with the pygame `GameAI` loader.
+The dataset file uses `az-do-dataset-v2`. It stores the training tensors
+`state`, `legal_mask`, MCTS `policy` visit distributions, and final `value`
+targets, plus per-sample and per-game metadata. The metadata records exact game
+boundaries, true ply, absolute player, chosen action, MCTS root statistics,
+flip counts, pass counts, terminal scores, final margins, and generator
+settings. The training command saves a raw `AlphaNet` state dict to
+`models/latest.pth`, keeping it compatible with the pygame `GameAI` loader.
+
+Inspect generated v2 datasets with the local data visualizer:
+
+```sh
+python webtools/data_visualizer/server.py --data-dir data
+```
 
 To run self-play and training as one pipeline with progress bars:
 

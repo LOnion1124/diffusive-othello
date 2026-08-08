@@ -118,15 +118,19 @@ function renderDashboard(payload) {
     ["负", colors.brick],
     ["和", colors.amber],
   ]);
-  drawOutcomeChart("firstMoverChart", combined.metrics.estimatedFirstMoverOutcomes, [
+  drawOutcomeChart("firstMoverChart", combined.metrics.firstMoverOutcomes, [
     ["先手胜", colors.teal],
     ["先手负", colors.brick],
     ["和", colors.amber],
   ]);
   drawBarChart("legalChart", combined.distributions.legalMoves, colors.green);
-  drawBarChart("moveChart", combined.distributions.estimatedMoveIndex, colors.teal);
+  drawBarChart("moveChart", combined.distributions.ply, colors.teal);
   drawBarChart("marginChart", combined.distributions.currentPieceDiff, colors.brick);
   drawBarChart("policyChart", combined.distributions.topPolicy, colors.violet);
+  drawBarChart("gameLengthChart", combined.distributions.gameLength, colors.green);
+  drawBarChart("passChart", combined.distributions.passCount, colors.amber);
+  drawBarChart("finalMarginChart", combined.distributions.finalMarginP1, colors.brick);
+  drawBarChart("visitShareChart", combined.distributions.chosenVisitShare, colors.violet);
 
   const heatmaps = combined.heatmaps;
   if (heatmaps) {
@@ -150,7 +154,7 @@ function renderMetrics(combined) {
     {
       label: "训练样本",
       value: formatNumber(combined.sampleCount),
-      note: `${formatNumber(combined.datasetCount)} 个数据文件`,
+      note: `${formatNumber(combined.gameCount)} 局 / ${formatNumber(combined.datasetCount)} 个文件`,
     },
     {
       label: "当前玩家胜率",
@@ -158,9 +162,9 @@ function renderMetrics(combined) {
       note: `${formatNumber(combined.metrics.outcomes.wins)} 胜 / ${formatNumber(combined.metrics.outcomes.losses)} 负`,
     },
     {
-      label: "估算先手胜率",
-      value: formatPercent(combined.metrics.estimatedFirstMoverOutcomes.winRate),
-      note: "按样本所在估算手数奇偶换算",
+      label: "先手胜率",
+      value: formatPercent(combined.metrics.firstMoverOutcomes.winRate),
+      note: "按逐局 winner 精确统计",
     },
     {
       label: "平均合法步",
@@ -173,9 +177,9 @@ function renderMetrics(combined) {
       note: "当前视角，非终局目差",
     },
     {
-      label: "平均估算手数",
-      value: formatFixed(combined.metrics.estimatedMoveIndex.mean, 1),
-      note: `最大 ${formatFixed(combined.metrics.estimatedMoveIndex.max, 0)}`,
+      label: "平均手数",
+      value: formatFixed(combined.metrics.ply.mean, 1),
+      note: `最大 ${formatFixed(combined.metrics.ply.max, 0)}`,
     },
     {
       label: "策略最高概率",
@@ -183,9 +187,24 @@ function renderMetrics(combined) {
       note: "MCTS 访问分布平均峰值",
     },
     {
-      label: "无效/跳过步数",
-      value: "不可用",
-      note: "pass 未写入当前训练样本格式",
+      label: "平均局长",
+      value: formatFixed(combined.metrics.gameLength.mean, 1),
+      note: `平均 pass ${formatFixed(combined.metrics.passCount.mean, 2)}`,
+    },
+    {
+      label: "终局目差",
+      value: formatSigned(combined.metrics.finalMarginP1.mean, 2),
+      note: "玩家1 - 玩家2",
+    },
+    {
+      label: "选中访问占比",
+      value: formatPercent(combined.metrics.chosenVisitShare.mean),
+      note: "chosen visit / root visit",
+    },
+    {
+      label: "平均翻子数",
+      value: formatFixed(combined.metrics.flippedCount.mean, 2),
+      note: "每次实际落子",
     },
   ];
 
@@ -258,11 +277,12 @@ function renderDatasetTable(datasets) {
       <thead>
         <tr>
           <th>文件</th>
+          <th>局数</th>
           <th>样本</th>
           <th>棋盘</th>
-          <th>胜率</th>
-          <th>平均合法步</th>
-          <th>平均目差</th>
+          <th>先手胜率</th>
+          <th>平均局长</th>
+          <th>终局目差</th>
         </tr>
       </thead>
       <tbody>
@@ -271,11 +291,12 @@ function renderDatasetTable(datasets) {
             (item) => `
               <tr>
                 <td>${escapeHtml(item.name)}</td>
+                <td>${formatNumber(item.gameCount)}</td>
                 <td>${formatNumber(item.sampleCount)}</td>
                 <td>${item.boardSize}x${item.boardSize}</td>
-                <td>${formatPercent(item.metrics.outcomes.winRate)}</td>
-                <td>${formatFixed(item.metrics.legalMoves.mean, 2)}</td>
-                <td>${formatSigned(item.metrics.currentPieceDiff.mean, 2)}</td>
+                <td>${formatPercent(item.metrics.firstMoverOutcomes.winRate)}</td>
+                <td>${formatFixed(item.metrics.gameLength.mean, 1)}</td>
+                <td>${formatSigned(item.metrics.finalMarginP1.mean, 1)}</td>
               </tr>
             `,
           )
@@ -459,9 +480,18 @@ function drawMessage(ctx, width, height, message) {
 
 function renderEmptyDashboard(message) {
   document.getElementById("metrics").innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
-  ["outcomeChart", "firstMoverChart", "legalChart", "moveChart", "marginChart", "policyChart"].forEach((id) =>
-    clearCanvas(id, message),
-  );
+  [
+    "outcomeChart",
+    "firstMoverChart",
+    "legalChart",
+    "moveChart",
+    "marginChart",
+    "policyChart",
+    "gameLengthChart",
+    "passChart",
+    "finalMarginChart",
+    "visitShareChart",
+  ].forEach((id) => clearCanvas(id, message));
   ["policyHeatmap", "legalHeatmap", "ownHeatmap", "opponentHeatmap"].forEach((id) => clearCanvas(id, message));
   document.getElementById("phaseTable").innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
   document.getElementById("datasetTable").innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;

@@ -116,6 +116,28 @@ Current behavior:
 - `ai.runtime.model_path` controls the pygame PVE checkpoint path.
 - `ai.self_play` and `ai.train` define generated data and checkpoint defaults.
 
+## Dataset Format Notes
+
+Self-play datasets use `az-do-dataset-v2`.
+
+Stored training tensors:
+
+- `states`: current-player encoded board tensors;
+- `legal_masks`: flattened legal action masks;
+- `policies`: MCTS visit-count distributions;
+- `values`: final outcome targets from the encoded player's perspective.
+
+Stored analysis metadata:
+
+- `sample_metadata`: exact game id, ply, absolute player, chosen action,
+  temperature, MCTS root/chosen-child statistics, policy concentration,
+  legal counts, piece counts, current margin, and flipped piece count;
+- `game_metadata`: exact game boundaries, first player, winner, move count,
+  pass count, terminal counts, final margin, and sample ranges.
+
+The data visualizer expects v2 datasets and uses these metadata fields for
+exact per-game statistics instead of estimating them from tensor occupancy.
+
 Recommended improvement:
 
 - Allow CLI overrides for model path and more runtime options.

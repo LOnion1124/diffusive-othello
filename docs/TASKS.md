@@ -167,7 +167,7 @@ Acceptance criteria:
 
 Goal: replace ad hoc self-play data with a consistent training dataset.
 
-Status: implemented. The canonical AlphaZero-style dataset lives in `src/train/dataset.py`, local PUCT MCTS lives in `src/model/mcts/mymcts.py`, self-play generation lives in `src/train/selfplay.py`, and training utilities consume soft MCTS visit distributions. The old heuristic-value self-play path and external `mcts_simple` dependency have been replaced.
+Status: implemented. The canonical AlphaZero-style v2 dataset lives in `src/train/dataset.py`, local PUCT MCTS lives in `src/model/mcts/mymcts.py`, self-play generation lives in `src/train/selfplay.py`, and training utilities consume soft MCTS visit distributions. The old heuristic-value self-play path and external `mcts_simple` dependency have been replaced. Dataset v2 also records exact per-sample and per-game analysis metadata for the local data visualizer.
 
 Tasks:
 
@@ -178,6 +178,11 @@ Tasks:
   - `value`: final outcome from the current player's perspective.
 - Remove or quarantine the old heuristic-value self-play path.
 - Store datasets in a versioned format with rule version, board size, and model version metadata.
+- Store exact analysis metadata:
+  - per-sample game id, ply, absolute player, selected action, MCTS root stats,
+    policy concentration, piece counts, current margin, and flip count;
+  - per-game boundaries, winner, move count, pass count, terminal score, and
+    final margin.
 - Add dataset validation:
   - policy sums to 1 over legal moves;
   - illegal moves have zero probability;

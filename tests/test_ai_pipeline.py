@@ -36,9 +36,12 @@ def test_dataset_round_trip_and_validation(tmp_path):
     loaded = load_dataset(path)
 
     validate_dataset(loaded)
-    assert loaded.metadata.format_version == "az-do-dataset-v1"
+    assert loaded.metadata.format_version == "az-do-dataset-v2"
     assert loaded.metadata.board_size == 4
     assert len(loaded) == 1
+    assert loaded.metadata.game_count == 1
+    assert loaded.sample_metadata["game_id"].tolist() == [0]
+    assert loaded.game_metadata["sample_count"].tolist() == [1]
 
 
 def test_dataset_rejects_policy_mass_on_illegal_moves():
@@ -112,6 +115,9 @@ def test_self_play_generates_valid_dataset():
 
     validate_dataset(dataset)
     assert len(dataset) > 0
+    assert dataset.metadata.game_count == 1
+    assert dataset.sample_metadata["game_id"].unique().tolist() == [0]
+    assert int(dataset.game_metadata["sample_count"].sum()) == len(dataset)
 
 
 def test_batched_self_play_generates_valid_dataset():
@@ -128,6 +134,8 @@ def test_batched_self_play_generates_valid_dataset():
 
     validate_dataset(dataset)
     assert len(dataset) > 0
+    assert dataset.metadata.game_count == 2
+    assert int(dataset.game_metadata["sample_count"].sum()) == len(dataset)
 
 
 def test_worker_self_play_generates_valid_dataset():
@@ -144,6 +152,8 @@ def test_worker_self_play_generates_valid_dataset():
 
     validate_dataset(dataset)
     assert len(dataset) > 0
+    assert dataset.metadata.game_count == 2
+    assert sorted(dataset.game_metadata["game_id"].tolist()) == [0, 1]
 
 
 def test_train_step_accepts_soft_policy_targets():

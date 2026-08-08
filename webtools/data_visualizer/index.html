@@ -59,8 +59,8 @@
           </div>
           <div class="panel">
             <div class="panel-title">
-              <h2>先后手估算</h2>
-              <span>样本加权</span>
+              <h2>先手结果</h2>
+              <span>逐局统计</span>
             </div>
             <canvas id="firstMoverChart" height="220"></canvas>
           </div>
@@ -76,8 +76,8 @@
           </div>
           <div class="panel">
             <div class="panel-title">
-              <h2>估算手数</h2>
-              <span>occupied - 4</span>
+              <h2>真实手数</h2>
+              <span>ply</span>
             </div>
             <canvas id="moveChart" height="230"></canvas>
           </div>
@@ -94,6 +94,37 @@
               <span>最高访问概率</span>
             </div>
             <canvas id="policyChart" height="230"></canvas>
+          </div>
+        </section>
+
+        <section class="chart-grid">
+          <div class="panel">
+            <div class="panel-title">
+              <h2>单局长度</h2>
+              <span>落子步数</span>
+            </div>
+            <canvas id="gameLengthChart" height="230"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-title">
+              <h2>Pass 次数</h2>
+              <span>每局</span>
+            </div>
+            <canvas id="passChart" height="230"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-title">
+              <h2>终局目差</h2>
+              <span>玩家1 - 玩家2</span>
+            </div>
+            <canvas id="finalMarginChart" height="230"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-title">
+              <h2>选中访问占比</h2>
+              <span>MCTS chosen/root</span>
+            </div>
+            <canvas id="visitShareChart" height="230"></canvas>
           </div>
         </section>
 
@@ -132,7 +163,7 @@
           <div class="panel">
             <div class="panel-title">
               <h2>阶段胜率</h2>
-              <span>按棋盘占用率</span>
+              <span>按真实局面占用率</span>
             </div>
             <div id="phaseTable" class="table-wrap"></div>
           </div>

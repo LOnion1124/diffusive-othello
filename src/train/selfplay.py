@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import math
 import random
 import warnings
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,7 @@ from src.game.state import (
     legal_moves,
     new_game,
     pass_turn,
+    score,
     winner,
 )
 from src.model.alphanet.network import AlphaNet
@@ -65,13 +67,45 @@ class RecordedSample:
     legal_mask: list[bool]
     policy: list[float]
     player: int
+    game_id: int
+    ply: int
+    move_action: int
+    temperature: float
+    root_value: float
+    root_visit_count: int
+    chosen_visit_count: int
+    chosen_prior: float
+    chosen_q: float
+    policy_entropy: float
+    top_policy: float
+    legal_count: int
+    own_count: int
+    opponent_count: int
+    empty_count: int
+    current_margin: int
+    flipped_count: int
+
+
+@dataclass
+class RecordedGame:
+    game_id: int
+    samples: list[RecordedSample]
+    winner: int
+    move_count: int
+    pass_count: int
+    terminal_p1_count: int
+    terminal_p2_count: int
+    terminal_empty_count: int
+    final_margin_p1: int
 
 
 @dataclass
 class _ActiveSelfPlayGame:
+    game_id: int
     state: GameState
     samples: list[RecordedSample]
     move_index: int
+    pass_count: int
     rng: random.Random
 
 
@@ -149,6 +183,7 @@ def _generate_self_play_dataset_single(
         results,
         board_size=config.board_size,
         model_version=config.model_version,
+        generator=_generator_metadata(config),
     )
 
 
@@ -224,6 +259,7 @@ def _generate_self_play_dataset_parallel(
         payloads,
         board_size=config.board_size,
         model_version=config.model_version,
+        generator=_generator_metadata(config),
     )
 
 
@@ -233,8 +269,8 @@ def play_self_play_games(
     config: SelfPlayConfig,
     rng: random.Random,
     on_game_done: Callable[[int, int], None] | None = None,
-) -> list[tuple[list[RecordedSample], int]]:
-    results: list[tuple[list[RecordedSample], int]] = []
+) -> list[RecordedGame]:
+    results: list[RecordedGame] = []
     active_games: list[_ActiveSelfPlayGame] = []
     games_started = 0
     total_samples = 0
@@ -256,9 +292,11 @@ def play_self_play_games(
         while games_started < config.games and len(active_games) < batch_size:
             active_games.append(
                 _ActiveSelfPlayGame(
+                    game_id=games_started,
                     state=new_game(config.board_size),
                     samples=[],
                     move_index=0,
+                    pass_count=0,
                     rng=random.Random(rng.randrange(2**63)),
                 )
             )
@@ -274,6 +312,7 @@ def play_self_play_games(
                 game.state,
                 game.state.current_player,
             ):
+                game.pass_count += 1
                 game.state = pass_turn(game.state).state
 
             if is_terminal(game.state):
@@ -284,7 +323,20 @@ def play_self_play_games(
         if completed:
             for game in completed:
                 game_winner = winner(game.state)
-                results.append((game.samples, game_winner))
+                counts = score(game.state)
+                results.append(
+                    RecordedGame(
+                        game_id=game.game_id,
+                        samples=game.samples,
+                        winner=game_winner,
+                        move_count=game.move_index,
+                        pass_count=game.pass_count,
+                        terminal_p1_count=counts[1],
+                        terminal_p2_count=counts[-1],
+                        terminal_empty_count=counts[0],
+                        final_margin_p1=counts[1] - counts[-1],
+                    )
+                )
                 total_samples += len(game.samples)
                 if on_game_done is not None:
                     on_game_done(1, total_samples)
@@ -321,47 +373,137 @@ def play_self_play_games(
             if not mask[action]:
                 raise RuntimeError("MCTS selected an illegal move.")
 
+            child = root.children[action]
+            own_count = sum(row.count(player) for row in game.state.board)
+            opponent_count = sum(row.count(-player) for row in game.state.board)
+            empty_count = sum(row.count(0) for row in game.state.board)
+            policy_entropy = _policy_entropy(policy)
+            top_policy = max(policy) if policy else 0.0
+            move_result = apply_move(
+                game.state,
+                player,
+                (action // game.state.size, action % game.state.size),
+                validate=False,
+            )
+
             game.samples.append(
                 RecordedSample(
                     state=encode_state(game.state, player),
                     legal_mask=mask,
                     policy=policy,
                     player=player,
+                    game_id=game.game_id,
+                    ply=game.move_index,
+                    move_action=action,
+                    temperature=search_temperature,
+                    root_value=root.value_mean,
+                    root_visit_count=root.visit_count,
+                    chosen_visit_count=child.visit_count,
+                    chosen_prior=child.prior,
+                    chosen_q=-child.value_mean,
+                    policy_entropy=policy_entropy,
+                    top_policy=top_policy,
+                    legal_count=sum(1 for allowed in mask if allowed),
+                    own_count=own_count,
+                    opponent_count=opponent_count,
+                    empty_count=empty_count,
+                    current_margin=own_count - opponent_count,
+                    flipped_count=len(move_result.flipped),
                 )
             )
 
-            size = game.state.size
-            game.state = apply_move(
-                game.state,
-                player,
-                (action // size, action % size),
-                validate=False,
-            ).state
+            game.state = move_result.state
             game.move_index += 1
 
     return results
 
 
 def _make_dataset_from_game_results(
-    game_results: list[tuple[list[RecordedSample], int]],
+    game_results: list[RecordedGame],
     *,
     board_size: int,
     model_version: str,
+    generator: dict[str, Any],
 ) -> DODataset:
     states: list[torch.Tensor] = []
     legal_masks: list[torch.Tensor] = []
     policies: list[torch.Tensor] = []
     values: list[float] = []
+    sample_metadata: dict[str, list[int | float]] = {
+        "game_id": [],
+        "ply": [],
+        "absolute_player": [],
+        "move_action": [],
+        "temperature": [],
+        "root_value": [],
+        "root_visit_count": [],
+        "chosen_visit_count": [],
+        "chosen_prior": [],
+        "chosen_q": [],
+        "policy_entropy": [],
+        "top_policy": [],
+        "legal_count": [],
+        "own_count": [],
+        "opponent_count": [],
+        "empty_count": [],
+        "current_margin": [],
+        "flipped_count": [],
+    }
+    game_metadata: dict[str, list[int]] = {
+        "game_id": [],
+        "first_player": [],
+        "winner": [],
+        "move_count": [],
+        "pass_count": [],
+        "terminal_p1_count": [],
+        "terminal_p2_count": [],
+        "terminal_empty_count": [],
+        "final_margin_p1": [],
+        "sample_start": [],
+        "sample_count": [],
+    }
 
-    for samples, game_winner in game_results:
-        for sample in samples:
+    sample_start = 0
+    for game in game_results:
+        game_metadata["game_id"].append(game.game_id)
+        game_metadata["first_player"].append(1)
+        game_metadata["winner"].append(game.winner)
+        game_metadata["move_count"].append(game.move_count)
+        game_metadata["pass_count"].append(game.pass_count)
+        game_metadata["terminal_p1_count"].append(game.terminal_p1_count)
+        game_metadata["terminal_p2_count"].append(game.terminal_p2_count)
+        game_metadata["terminal_empty_count"].append(game.terminal_empty_count)
+        game_metadata["final_margin_p1"].append(game.final_margin_p1)
+        game_metadata["sample_start"].append(sample_start)
+        game_metadata["sample_count"].append(len(game.samples))
+        sample_start += len(game.samples)
+
+        for sample in game.samples:
             states.append(torch.tensor(sample.state, dtype=torch.float32))
             legal_masks.append(torch.tensor(sample.legal_mask, dtype=torch.bool))
             policies.append(torch.tensor(sample.policy, dtype=torch.float32))
-            if game_winner == 0:
+            if game.winner == 0:
                 values.append(0.0)
             else:
-                values.append(1.0 if game_winner == sample.player else -1.0)
+                values.append(1.0 if game.winner == sample.player else -1.0)
+            sample_metadata["game_id"].append(sample.game_id)
+            sample_metadata["ply"].append(sample.ply)
+            sample_metadata["absolute_player"].append(sample.player)
+            sample_metadata["move_action"].append(sample.move_action)
+            sample_metadata["temperature"].append(sample.temperature)
+            sample_metadata["root_value"].append(sample.root_value)
+            sample_metadata["root_visit_count"].append(sample.root_visit_count)
+            sample_metadata["chosen_visit_count"].append(sample.chosen_visit_count)
+            sample_metadata["chosen_prior"].append(sample.chosen_prior)
+            sample_metadata["chosen_q"].append(sample.chosen_q)
+            sample_metadata["policy_entropy"].append(sample.policy_entropy)
+            sample_metadata["top_policy"].append(sample.top_policy)
+            sample_metadata["legal_count"].append(sample.legal_count)
+            sample_metadata["own_count"].append(sample.own_count)
+            sample_metadata["opponent_count"].append(sample.opponent_count)
+            sample_metadata["empty_count"].append(sample.empty_count)
+            sample_metadata["current_margin"].append(sample.current_margin)
+            sample_metadata["flipped_count"].append(sample.flipped_count)
 
     if not states:
         raise ValueError("Self-play produced no trainable samples.")
@@ -373,6 +515,9 @@ def _make_dataset_from_game_results(
         torch.tensor(values, dtype=torch.float32),
         board_size=board_size,
         model_version=model_version,
+        sample_metadata=_tensor_sample_metadata(sample_metadata),
+        game_metadata=_tensor_game_metadata(game_metadata),
+        generator=generator,
     )
     validate_dataset(dataset)
     return dataset
@@ -408,9 +553,31 @@ def _merge_dataset_payloads(
     *,
     board_size: int,
     model_version: str,
+    generator: dict[str, Any],
 ) -> DODataset:
     if not payloads:
         raise ValueError("Self-play produced no shards.")
+    sample_metadata_parts: list[dict[str, torch.Tensor]] = []
+    game_metadata_parts: list[dict[str, torch.Tensor]] = []
+    game_offset = 0
+    sample_offset = 0
+    for payload in payloads:
+        sample_metadata = {
+            field: tensor.clone()
+            for field, tensor in payload["sample_metadata"].items()
+        }
+        game_metadata = {
+            field: tensor.clone()
+            for field, tensor in payload["game_metadata"].items()
+        }
+        sample_metadata["game_id"] += game_offset
+        game_metadata["game_id"] += game_offset
+        game_metadata["sample_start"] += sample_offset
+        sample_metadata_parts.append(sample_metadata)
+        game_metadata_parts.append(game_metadata)
+        game_offset += int(game_metadata["game_id"].numel())
+        sample_offset += int(payload["states"].shape[0])
+
     dataset = make_dataset(
         torch.cat([payload["states"] for payload in payloads], dim=0),
         torch.cat([payload["legal_masks"] for payload in payloads], dim=0),
@@ -418,6 +585,9 @@ def _merge_dataset_payloads(
         torch.cat([payload["values"] for payload in payloads], dim=0),
         board_size=board_size,
         model_version=model_version,
+        sample_metadata=_cat_metadata(sample_metadata_parts),
+        game_metadata=_cat_metadata(game_metadata_parts),
+        generator=generator,
     )
     validate_dataset(dataset)
     return dataset
@@ -433,6 +603,52 @@ def _shard_seed(seed: int | None, index: int) -> int | None:
     if seed is None:
         return None
     return seed + index * 1_000_003
+
+
+def _generator_metadata(config: SelfPlayConfig) -> dict[str, Any]:
+    return asdict(config)
+
+
+def _tensor_sample_metadata(data: dict[str, list[int | float]]) -> dict[str, torch.Tensor]:
+    long_fields = {
+        "game_id",
+        "ply",
+        "absolute_player",
+        "move_action",
+        "root_visit_count",
+        "chosen_visit_count",
+        "legal_count",
+        "own_count",
+        "opponent_count",
+        "empty_count",
+        "current_margin",
+        "flipped_count",
+    }
+    return {
+        field: torch.tensor(values, dtype=torch.long if field in long_fields else torch.float32)
+        for field, values in data.items()
+    }
+
+
+def _tensor_game_metadata(data: dict[str, list[int]]) -> dict[str, torch.Tensor]:
+    return {field: torch.tensor(values, dtype=torch.long) for field, values in data.items()}
+
+
+def _cat_metadata(parts: list[dict[str, torch.Tensor]]) -> dict[str, torch.Tensor]:
+    if not parts:
+        return {}
+    return {
+        field: torch.cat([part[field] for part in parts], dim=0)
+        for field in parts[0]
+    }
+
+
+def _policy_entropy(policy: list[float]) -> float:
+    entropy = 0.0
+    for probability in policy:
+        if probability > 0.0:
+            entropy -= probability * math.log(probability)
+    return entropy
 
 
 def _validate_self_play_config(config: SelfPlayConfig) -> None:
@@ -456,7 +672,7 @@ def play_self_play_game(
     evaluator: UniformEvaluator | NeuralEvaluator,
     config: SelfPlayConfig,
     rng: random.Random,
-) -> tuple[list[RecordedSample], int]:
+) -> RecordedGame:
     return play_self_play_games(
         evaluator=evaluator,
         config=replace(config, games=1, batch_size=1, workers=1),

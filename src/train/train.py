@@ -117,6 +117,7 @@ def train_from_dataset(
         "rule_version": dataset.metadata.rule_version,
         "dataset_model_version": dataset.metadata.model_version,
         "sample_count": len(dataset),
+        "game_count": dataset.metadata.game_count,
         "epochs": epochs,
         "batch_size": batch_size,
         "lr": lr,
