@@ -77,6 +77,10 @@ Required dependencies:
 Expected behavior:
 
 - Training should run through command-line scripts, not notebooks only.
+- The root training entry point is `.\train.ps1`, which starts the multi-stage
+  trainer in the background and writes logs under `logs/`.
+- Python training implementation scripts live under `src/train`; keep the root
+  launcher as the documented training entry point.
 - All training dependencies should be documented and installable.
 - MCTS should not depend on an undeclared external package.
 - Self-play can batch multiple active games in one process with

@@ -4,7 +4,7 @@ import pytest
 
 pytest.importorskip("torch")
 
-from train_multistage import (
+from src.train.train_multistage import (
     DEFAULT_STAGES,
     select_stages,
     resolve_initial_checkpoint,

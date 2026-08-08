@@ -118,42 +118,37 @@ Inspect generated v2 datasets with the local data visualizer:
 python webtools/data_visualizer/server.py --data-dir data
 ```
 
-To run self-play and training as one pipeline with progress bars:
+Use the root training entry point to run the default multi-stage schedule in
+the background. It writes logs under `logs/` and runs the package module from
+`src/train`:
 
-```sh
-python train_pipeline.py --games 10 --simulations 64 --epochs 5 --device cpu
+```powershell
+.\train.ps1
 ```
 
-Capacity can be overridden from training scripts without editing `config.yaml`:
+The default launcher uses CUDA, batched self-play, `--resume`, and
+`--promote-latest`. Common overrides:
 
-```sh
-python train_pipeline.py --num-filters 128 --num-res-blocks 8 --value-hidden-dim 256 --games 100 --simulations 192 --epochs 10 --device cuda --self-play-batch-size 8
+```powershell
+.\train.ps1 -Device cpu
+.\train.ps1 -Device cuda -SelfPlayBatchSize 16
+.\train.ps1 -StartStage 3 -InitialCheckpoint models\stage2_iter01.pth
 ```
 
-To continue from an existing model, pass it as `--checkpoint`. The pipeline uses
-that checkpoint for self-play MCTS and also initializes training from the same
-weights:
+Watch the background logs:
 
-```sh
-python train_pipeline.py --checkpoint models/latest.pth --dataset data/selfplay_iter01.pt --output models/latest_iter01.pth --games 100 --simulations 128 --epochs 10 --device cuda
+```powershell
+Get-Content .\logs\train_multistage.out -Tail 50 -Wait
+Get-Content .\logs\train_multistage.err -Tail 50 -Wait
 ```
 
-Use `--init-checkpoint` to initialize training from a different model, or
-`--train-from-scratch` to use `--checkpoint` only for self-play.
+Stop a background run by PID, using the value printed by `train.ps1`:
 
-To run the default multi-stage schedule continuously:
-
-```sh
-python train_multistage.py --device cuda
+```powershell
+Stop-Process -Id <PID>
 ```
 
-For GPU training, use batched self-play to keep model inference from running as many tiny `batch=1` calls:
-
-```sh
-python train_multistage.py --device cuda --self-play-batch-size 8
-```
-
-The default stages write independent datasets and checkpoints:
+The default multi-stage schedule writes independent datasets and checkpoints:
 
 - `data/stage1_bootstrap.pt` -> `models/stage1_bootstrap.pth`
 - `data/stage2_iter01.pt` -> `models/stage2_iter01.pth`
@@ -161,17 +156,6 @@ The default stages write independent datasets and checkpoints:
 - `data/stage4_iter03.pt` -> `models/stage4_iter03.pth`
 - `data/stage5_final.pt` -> `models/stage5_final.pth`
 
-Run it in the background on Windows PowerShell:
-
-```powershell
-New-Item -ItemType Directory -Force logs
-Start-Process -WindowStyle Hidden `
-  -FilePath .\venv\Scripts\python.exe `
-  -ArgumentList "-u train_multistage.py --device cuda --resume" `
-  -RedirectStandardOutput logs\train_multistage.out `
-  -RedirectStandardError logs\train_multistage.err
-```
-
-Use `--start-stage N --initial-checkpoint model\some_stage.pth` to resume from
-the middle manually, and `--promote-latest` to copy the final checkpoint to the
-configured pygame model path.
+The implementation scripts live under `src/train/train_multistage.py` and
+`src/train/train_pipeline.py`; keep `train.ps1` as the root training entry
+point.
