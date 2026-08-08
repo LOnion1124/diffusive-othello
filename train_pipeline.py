@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import argparse
 
-from src.config import get_ai_config, get_alphanet_kwargs, resolve_torch_device
+from src.config import (
+    add_alphanet_model_args,
+    apply_alphanet_arg_overrides,
+    get_ai_config,
+    get_alphanet_kwargs,
+    resolve_torch_device,
+)
 from src.train.selfplay import (
     SelfPlayConfig,
     generate_self_play_dataset,
@@ -53,13 +59,14 @@ def parse_args() -> argparse.Namespace:
         default=self_play_config["temperature_drop_move"],
     )
     parser.add_argument("--no-root-noise", action="store_true")
+    add_alphanet_model_args(parser, model_config)
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     ai_config = get_ai_config()
-    model_config = get_alphanet_kwargs()
+    model_config = apply_alphanet_arg_overrides(get_alphanet_kwargs(), args)
     mcts_config = ai_config["mcts"]
     device = resolve_torch_device(args.device)
     init_checkpoint = None
@@ -95,6 +102,7 @@ def main() -> int:
             temperature_drop_move=args.temperature_drop_move,
             seed=args.seed,
             add_root_noise=(mcts_config["add_root_noise"] and not args.no_root_noise),
+            model_version=ai_config["model"]["version"],
         ),
         save_path=args.dataset,
         show_progress=True,

@@ -11,11 +11,12 @@ ai:
 
   model:
     architecture: "alphanet"
-    version: "alphanet-v1"
+    version: "alphanet-v2"
     board_size: 9
     in_channels: 3
-    num_filters: 64
-    num_res_blocks: 3
+    num_filters: 96
+    num_res_blocks: 6
+    value_hidden_dim: 128
 
   mcts:
     num_simulations: 64

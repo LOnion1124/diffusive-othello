@@ -9,7 +9,13 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
-from src.config import get_ai_config, get_alphanet_kwargs, resolve_torch_device
+from src.config import (
+    add_alphanet_model_args,
+    apply_alphanet_arg_overrides,
+    get_ai_config,
+    get_alphanet_kwargs,
+    resolve_torch_device,
+)
 from src.train.dataset import load_dataset, save_dataset, validate_dataset
 from src.model.alphanet.network import AlphaNet
 from src.train.selfplay import SelfPlayConfig, generate_self_play_dataset
@@ -104,10 +110,12 @@ def train_from_dataset(
 
     metadata = {
         "board_size": board_size,
+        "model_config": kwargs,
         "dataset_path": str(dataset_path),
         "init_checkpoint": str(init_checkpoint) if init_checkpoint is not None else None,
         "dataset_format_version": dataset.metadata.format_version,
         "rule_version": dataset.metadata.rule_version,
+        "dataset_model_version": dataset.metadata.model_version,
         "sample_count": len(dataset),
         "epochs": epochs,
         "batch_size": batch_size,
@@ -156,9 +164,11 @@ def main() -> None:
     parser.add_argument("--generated-dataset", default=self_play_config["output_path"])
     parser.add_argument("--simulations", type=int, default=mcts_config["num_simulations"])
     parser.add_argument("--seed", type=int, default=self_play_config["seed"])
+    add_alphanet_model_args(parser, model_config)
     args = parser.parse_args()
 
     device = resolve_torch_device(args.device)
+    model_config = apply_alphanet_arg_overrides(model_config, args)
     dataset_path = args.dataset
     if args.generate_games > 0:
         dataset = generate_self_play_dataset(
@@ -174,6 +184,7 @@ def main() -> None:
                 temperature_drop_move=self_play_config["temperature_drop_move"],
                 seed=args.seed,
                 add_root_noise=mcts_config["add_root_noise"],
+                model_version=ai_config["model"]["version"],
             ),
         )
         save_dataset(dataset, args.generated_dataset)

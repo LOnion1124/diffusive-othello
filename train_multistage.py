@@ -8,7 +8,13 @@ import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from src.config import get_ai_config, get_alphanet_kwargs, resolve_torch_device
+from src.config import (
+    add_alphanet_model_args,
+    apply_alphanet_arg_overrides,
+    get_ai_config,
+    get_alphanet_kwargs,
+    resolve_torch_device,
+)
 from src.train.selfplay import (
     SelfPlayConfig,
     generate_self_play_dataset,
@@ -80,6 +86,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--seed-base", type=int, default=1000)
     parser.add_argument("--no-root-noise", action="store_true")
+    add_alphanet_model_args(parser, model_config)
     return parser.parse_args()
 
 
@@ -95,7 +102,7 @@ def main() -> int:
 
     device = resolve_torch_device(args.device)
     ai_config = get_ai_config()
-    model_config = get_alphanet_kwargs()
+    model_config = apply_alphanet_arg_overrides(get_alphanet_kwargs(), args)
     mcts_config = ai_config["mcts"]
     data_dir = Path(args.data_dir)
     model_dir = Path(args.model_dir)
@@ -159,6 +166,7 @@ def main() -> int:
                 temperature_drop_move=args.temperature_drop_move,
                 seed=args.seed_base + stage.index,
                 add_root_noise=(mcts_config["add_root_noise"] and not args.no_root_noise),
+                model_version=ai_config["model"]["version"],
             ),
             save_path=dataset_path,
             show_progress=True,

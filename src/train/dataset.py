@@ -11,7 +11,7 @@ from torch.utils.data import Dataset
 
 DATASET_FORMAT_VERSION = "az-do-dataset-v1"
 RULE_VERSION = "diffusive-othello-rules-v2"
-DEFAULT_MODEL_VERSION = "alphanet-v1"
+DEFAULT_MODEL_VERSION = "alphanet-v2"
 
 
 @dataclass(frozen=True)

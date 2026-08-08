@@ -64,10 +64,16 @@ This game is still under development, and its rules may be adjusted in future up
 AI defaults live under the `ai` section of `config.yaml`:
 
 - `ai.runtime`: inference/training device and pygame model path.
-- `ai.model`: AlphaNet architecture and board size.
+- `ai.model`: AlphaNet architecture, board size, residual trunk size, and value-head hidden size.
 - `ai.mcts`: search parameters for self-play.
 - `ai.self_play`: generated dataset defaults.
 - `ai.train`: dataset, checkpoint, and optimizer defaults.
+
+The default AlphaNet is `alphanet-v2` with `num_filters: 96`,
+`num_res_blocks: 6`, and `value_hidden_dim: 128`. This is intended to better
+match later-stage MCTS targets with 192/256 simulations than the earlier
+64-filter, 3-block model. Checkpoints from the smaller `alphanet-v1` shape
+should be loaded with matching model settings or retrained under the new config.
 
 Generate a versioned AlphaZero-style self-play dataset:
 
@@ -93,6 +99,12 @@ To run self-play and training as one pipeline with progress bars:
 
 ```sh
 python train_pipeline.py --games 10 --simulations 64 --epochs 5 --device cpu
+```
+
+Capacity can be overridden from training scripts without editing `config.yaml`:
+
+```sh
+python train_pipeline.py --num-filters 128 --num-res-blocks 8 --value-hidden-dim 256 --games 100 --simulations 192 --epochs 10 --device cuda
 ```
 
 To continue from an existing model, pass it as `--checkpoint`. The pipeline uses

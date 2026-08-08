@@ -9,8 +9,14 @@ from pathlib import Path
 
 import torch
 
-from src.train.dataset import DODataset, make_dataset, save_dataset, validate_dataset
-from src.config import get_ai_config, get_alphanet_kwargs, resolve_torch_device
+from src.train.dataset import DEFAULT_MODEL_VERSION, DODataset, make_dataset, save_dataset, validate_dataset
+from src.config import (
+    add_alphanet_model_args,
+    apply_alphanet_arg_overrides,
+    get_ai_config,
+    get_alphanet_kwargs,
+    resolve_torch_device,
+)
 from src.game.state import (
     GameState,
     apply_move,
@@ -44,6 +50,7 @@ class SelfPlayConfig:
     temperature_drop_move: int = 20
     seed: int | None = None
     add_root_noise: bool = True
+    model_version: str = DEFAULT_MODEL_VERSION
 
 
 @dataclass
@@ -107,6 +114,7 @@ def generate_self_play_dataset(
         torch.stack(policies),
         torch.tensor(values, dtype=torch.float32),
         board_size=config.board_size,
+        model_version=config.model_version,
     )
     validate_dataset(dataset)
     if save_path is not None:
@@ -205,9 +213,11 @@ def main() -> None:
     parser.add_argument("--device", default=runtime_config["device"])
     parser.add_argument("--seed", type=int, default=self_play_config["seed"])
     parser.add_argument("--no-root-noise", action="store_true")
+    add_alphanet_model_args(parser, model_config)
     args = parser.parse_args()
 
     device = resolve_torch_device(args.device)
+    model_config = apply_alphanet_arg_overrides(model_config, args)
     model = load_model_for_self_play(
         args.checkpoint,
         board_size=args.board_size,
@@ -228,6 +238,7 @@ def main() -> None:
             temperature_drop_move=self_play_config["temperature_drop_move"],
             seed=args.seed,
             add_root_noise=(mcts_config["add_root_noise"] and not args.no_root_noise),
+            model_version=ai_config["model"]["version"],
         ),
         save_path=args.output,
     )

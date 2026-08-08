@@ -23,11 +23,12 @@ DEFAULT_CFG: dict[str, Any] = {
         },
         "model": {
             "architecture": "alphanet",
-            "version": "alphanet-v1",
+            "version": "alphanet-v2",
             "board_size": 9,
             "in_channels": 3,
-            "num_filters": 64,
-            "num_res_blocks": 3,
+            "num_filters": 96,
+            "num_res_blocks": 6,
+            "value_hidden_dim": 128,
         },
         "mcts": {
             "num_simulations": 64,
@@ -85,7 +86,28 @@ def get_alphanet_kwargs(config: dict[str, Any] | None = None) -> dict[str, int]:
         "in_channels": int(model_config["in_channels"]),
         "num_filters": int(model_config["num_filters"]),
         "num_res_blocks": int(model_config["num_res_blocks"]),
+        "value_hidden_dim": int(model_config["value_hidden_dim"]),
     }
+
+
+def add_alphanet_model_args(
+    parser: argparse.ArgumentParser,
+    model_config: dict[str, int],
+) -> None:
+    parser.add_argument("--num-filters", type=int, default=model_config["num_filters"])
+    parser.add_argument("--num-res-blocks", type=int, default=model_config["num_res_blocks"])
+    parser.add_argument("--value-hidden-dim", type=int, default=model_config["value_hidden_dim"])
+
+
+def apply_alphanet_arg_overrides(
+    model_config: dict[str, int],
+    args: argparse.Namespace,
+) -> dict[str, int]:
+    updated = dict(model_config)
+    updated["num_filters"] = int(args.num_filters)
+    updated["num_res_blocks"] = int(args.num_res_blocks)
+    updated["value_hidden_dim"] = int(args.value_hidden_dim)
+    return updated
 
 
 def resolve_torch_device(requested: str | None = None, config: dict[str, Any] | None = None) -> str:

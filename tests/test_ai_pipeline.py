@@ -100,6 +100,18 @@ def test_train_step_accepts_soft_policy_targets():
     assert value_loss >= 0
 
 
+def test_alphanet_value_hidden_dim_is_configurable():
+    model = AlphaNet(
+        board_size=4,
+        num_filters=8,
+        num_res_blocks=1,
+        value_hidden_dim=32,
+    )
+
+    assert model.value_fc1.out_features == 32
+    assert model.value_fc2.in_features == 32
+
+
 def test_train_from_dataset_can_initialize_from_checkpoint(tmp_path):
     encoded, mask, policy = _initial_sample_tensors()
     dataset = make_dataset(

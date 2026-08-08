@@ -20,8 +20,9 @@ def test_alphanet_kwargs_match_config_schema():
     assert get_alphanet_kwargs(config) == {
         "board_size": 9,
         "in_channels": 3,
-        "num_filters": 64,
-        "num_res_blocks": 3,
+        "num_filters": 96,
+        "num_res_blocks": 6,
+        "value_hidden_dim": 128,
     }
 
 

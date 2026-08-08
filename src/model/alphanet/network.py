@@ -3,7 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class AlphaNet(nn.Module):
-    def __init__(self, board_size=9, in_channels=3, num_filters=64, num_res_blocks=3):
+    def __init__(
+        self,
+        board_size=9,
+        in_channels=3,
+        num_filters=96,
+        num_res_blocks=6,
+        value_hidden_dim=128,
+    ):
         super().__init__()
         H = board_size
         self.conv0 = nn.Conv2d(in_channels, num_filters, kernel_size=3, stride=1, padding=1)
@@ -25,8 +32,8 @@ class AlphaNet(nn.Module):
         # value head
         self.value_conv = nn.Conv2d(num_filters, 1, kernel_size=1)
         self.value_bn = nn.BatchNorm2d(1)
-        self.value_fc1 = nn.Linear(1 * H * H, 64)
-        self.value_fc2 = nn.Linear(64, 1)
+        self.value_fc1 = nn.Linear(1 * H * H, value_hidden_dim)
+        self.value_fc2 = nn.Linear(value_hidden_dim, 1)
 
         self._init_weights()
 
