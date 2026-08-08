@@ -1,6 +1,6 @@
 import pytest
 
-from src.game.state import PLAYER_ONE, PLAYER_TWO, legal_moves
+from src.game.state import PLAYER_ONE, PLAYER_TWO, legal_moves, state_from_board
 from src.ui.game_controller import GameController, MODE_PVE, MODE_PVP
 
 

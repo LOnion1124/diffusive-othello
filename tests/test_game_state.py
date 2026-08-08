@@ -22,10 +22,10 @@ def test_new_game_initial_position_and_score():
     state = new_game(4)
 
     assert state.board == (
-        (PLAYER_ONE, EMPTY, EMPTY, PLAYER_ONE),
+        (PLAYER_ONE, EMPTY, EMPTY, PLAYER_TWO),
         (EMPTY, EMPTY, EMPTY, EMPTY),
         (EMPTY, EMPTY, EMPTY, EMPTY),
-        (PLAYER_TWO, EMPTY, EMPTY, PLAYER_TWO),
+        (PLAYER_TWO, EMPTY, EMPTY, PLAYER_ONE),
     )
     assert score(state) == {EMPTY: 12, PLAYER_ONE: 2, PLAYER_TWO: 2}
 
@@ -33,12 +33,12 @@ def test_new_game_initial_position_and_score():
 def test_legal_moves_and_flat_mask_for_initial_position():
     state = new_game(4)
 
-    assert set(legal_moves(state, PLAYER_ONE)) == {(0, 1), (0, 2), (1, 0), (1, 3)}
-    assert set(legal_moves(state, PLAYER_TWO)) == {(2, 0), (2, 3), (3, 1), (3, 2)}
+    assert set(legal_moves(state, PLAYER_ONE)) == {(0, 1), (1, 0), (2, 3), (3, 2)}
+    assert set(legal_moves(state, PLAYER_TWO)) == {(0, 2), (1, 3), (2, 0), (3, 1)}
 
     mask = legal_mask(state, PLAYER_ONE)
     assert len(mask) == 16
-    assert [idx for idx, allowed in enumerate(mask) if allowed] == [1, 2, 4, 7]
+    assert [idx for idx, allowed in enumerate(mask) if allowed] == [1, 4, 11, 14]
 
 
 def test_apply_move_flips_all_surrounding_opponents():

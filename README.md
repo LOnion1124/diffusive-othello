@@ -48,7 +48,7 @@ python cli.py
 
 ### Game Rules
 
-This game is a variant of the classic board game *Reversi*. It is played on a 9×9 board. At the start of the game, each player has two pieces placed in the corners on their respective opposite sides of the board. The players then take turns placing pieces.
+This game is a variant of the classic board game *Reversi*. It is played on a 9×9 board. At the start of the game, each player has two pieces placed in diagonal corners of the board. The players then take turns placing pieces.
 
 A move is valid only if:
 

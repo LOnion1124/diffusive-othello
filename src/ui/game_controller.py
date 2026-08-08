@@ -45,6 +45,8 @@ class GameSnapshot:
     winner_name: str
     info: str
     mode: str
+    legal_place_moves: tuple[Move, ...] = ()
+    legal_flip_moves: tuple[Move, ...] = ()
 
 
 class FirstLegalMovePolicy:
@@ -131,6 +133,13 @@ class GameController:
             PLAYER_ONE: 0,
             PLAYER_TWO: 0,
         }
+        legal_place_moves: tuple[Move, ...] = ()
+        legal_flip_moves: tuple[Move, ...] = ()
+        if (
+            self.phase == PHASE_GAME
+            and self.state is not None
+        ):
+            legal_place_moves = tuple(legal_moves(self.state, self.current_player))
         return GameSnapshot(
             phase=self.phase,
             board_size=self.board_size,
@@ -141,6 +150,8 @@ class GameController:
             winner_name=self.winner_name,
             info=self.info,
             mode=self.mode,
+            legal_place_moves=legal_place_moves,
+            legal_flip_moves=legal_flip_moves,
         )
 
     def start_game(self) -> None:
@@ -213,15 +224,15 @@ class GameController:
         if self.state is None:
             return
 
-        if is_terminal(self.state):
+        if self._is_terminal():
             self._end_game()
             return
 
         player = self.current_player
-        if not legal_moves(self.state, player):
+        if not self._can_current_player_act():
             skipped_name = self.player_names[player]
             self.state = pass_turn(self.state).state
-            if is_terminal(self.state):
+            if self._is_terminal():
                 self._end_game()
                 return
             self.info = f"No place left for {skipped_name}."
@@ -229,6 +240,17 @@ class GameController:
 
         if not keep_existing_info:
             self.info = f"{self.player_names[player]}'s turn."
+
+    def _is_terminal(self) -> bool:
+        if self.state is None:
+            return False
+        return is_terminal(self.state)
+
+    def _can_current_player_act(self) -> bool:
+        if self.state is None:
+            return False
+        player = self.current_player
+        return bool(legal_moves(self.state, player))
 
     def _end_game(self) -> None:
         if self.state is None:

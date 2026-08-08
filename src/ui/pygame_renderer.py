@@ -17,6 +17,7 @@ class PygameRenderer:
     COLOR_PLAYER2 = (0, 255, 255)
     COLOR_TEXT = (255, 255, 255)
     COLOR_PANEL = (165, 42, 42)
+    COLOR_MOVE_HINT = (240, 240, 240)
 
     def __init__(self, pygame_module, screen, *, board_size: int) -> None:
         self.pygame = pygame_module
@@ -56,7 +57,9 @@ class PygameRenderer:
     def _draw_game(self, snapshot: GameSnapshot) -> None:
         self._draw_board_background(self.COLOR_BACKGROUND)
         self._draw_grid()
+        self._draw_place_hints(snapshot)
         self._draw_pieces(snapshot)
+        self._draw_flip_hints(snapshot)
 
     def _draw_end(self, snapshot: GameSnapshot) -> None:
         self._draw_board_background(self.COLOR_PANEL)
@@ -105,6 +108,43 @@ class PygameRenderer:
                     top + (self.GRID_SIZE // 2) + y * self.GRID_SIZE,
                 )
                 self.pygame.draw.circle(self.screen, color, center, self.piece_radius)
+
+    def _draw_place_hints(self, snapshot: GameSnapshot) -> None:
+        left, top = self.board_left_top
+        hint_radius = max(4, round(self.GRID_SIZE * 0.11))
+        for x, y in snapshot.legal_place_moves:
+            center = (
+                left + (self.GRID_SIZE // 2) + x * self.GRID_SIZE,
+                top + (self.GRID_SIZE // 2) + y * self.GRID_SIZE,
+            )
+            self.pygame.draw.circle(
+                self.screen,
+                self.COLOR_MOVE_HINT,
+                center,
+                hint_radius,
+            )
+
+    def _draw_flip_hints(self, snapshot: GameSnapshot) -> None:
+        color = (
+            self.COLOR_PLAYER1
+            if snapshot.current_player == PLAYER_ONE
+            else self.COLOR_PLAYER2
+        )
+        left, top = self.board_left_top
+        ring_radius = min(self.GRID_SIZE // 2 - 5, self.piece_radius + 5)
+        for x, y in snapshot.legal_flip_moves:
+            center = (
+                left + (self.GRID_SIZE // 2) + x * self.GRID_SIZE,
+                top + (self.GRID_SIZE // 2) + y * self.GRID_SIZE,
+            )
+            self.pygame.draw.circle(
+                self.screen,
+                self.COLOR_MOVE_HINT,
+                center,
+                ring_radius,
+                4,
+            )
+            self.pygame.draw.circle(self.screen, color, center, ring_radius - 4, 3)
 
     def _draw_title(self, text: str) -> None:
         center = (

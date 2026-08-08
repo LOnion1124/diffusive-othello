@@ -75,9 +75,9 @@ def new_game(size: int = 9) -> GameState:
 
     board = [[EMPTY for _ in range(size)] for _ in range(size)]
     board[0][0] = PLAYER_ONE
-    board[0][size - 1] = PLAYER_ONE
+    board[size - 1][size - 1] = PLAYER_ONE
+    board[0][size - 1] = PLAYER_TWO
     board[size - 1][0] = PLAYER_TWO
-    board[size - 1][size - 1] = PLAYER_TWO
     return state_from_board(board)
 
 
@@ -104,6 +104,9 @@ def legal_moves(state: GameState, player: int) -> list[Move]:
             if _is_legal_move(state, player, move):
                 moves.append(move)
     return moves
+
+
+
 
 
 def legal_mask(
