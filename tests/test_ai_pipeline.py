@@ -2,11 +2,11 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from src.dataset.dataset import load_dataset, make_dataset, save_dataset, validate_dataset
+from src.train.dataset import load_dataset, make_dataset, save_dataset, validate_dataset
 from src.game.state import encode_state, legal_mask, new_game
 from src.model.alphanet.network import AlphaNet
 from src.model.mcts.mymcts import AlphaZeroMCTS, MCTSConfig
-from src.selfplay.selfplay import SelfPlayConfig, generate_self_play_dataset
+from src.train.selfplay import SelfPlayConfig, generate_self_play_dataset
 from src.train.train import train_from_dataset
 from src.train.train_utils import train_step
 

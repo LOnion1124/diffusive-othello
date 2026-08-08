@@ -10,9 +10,9 @@ import torch
 from torch.utils.data import DataLoader
 
 from src.config import get_ai_config, get_alphanet_kwargs, resolve_torch_device
-from src.dataset.dataset import load_dataset, save_dataset, validate_dataset
+from src.train.dataset import load_dataset, save_dataset, validate_dataset
 from src.model.alphanet.network import AlphaNet
-from src.selfplay.selfplay import SelfPlayConfig, generate_self_play_dataset
+from src.train.selfplay import SelfPlayConfig, generate_self_play_dataset
 from src.train.train_utils import train_step
 
 

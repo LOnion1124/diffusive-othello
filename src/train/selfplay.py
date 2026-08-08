@@ -9,7 +9,7 @@ from pathlib import Path
 
 import torch
 
-from src.dataset.dataset import DODataset, make_dataset, save_dataset, validate_dataset
+from src.train.dataset import DODataset, make_dataset, save_dataset, validate_dataset
 from src.config import get_ai_config, get_alphanet_kwargs, resolve_torch_device
 from src.game.state import (
     GameState,

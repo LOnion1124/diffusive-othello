@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from src.config import get_ai_config, get_alphanet_kwargs, resolve_torch_device
-from src.selfplay.selfplay import (
+from src.train.selfplay import (
     SelfPlayConfig,
     generate_self_play_dataset,
     load_model_for_self_play,

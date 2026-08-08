@@ -72,7 +72,7 @@ AI defaults live under the `ai` section of `config.yaml`:
 Generate a versioned AlphaZero-style self-play dataset:
 
 ```sh
-python -m src.selfplay.selfplay --output data/selfplay.pt --games 10 --simulations 64 --device cpu
+python -m src.train.selfplay --output data/selfplay.pt --games 10 --simulations 64 --device cpu
 ```
 
 Train a model that the current pygame PVE mode can load through `config.yaml`:
