@@ -78,7 +78,7 @@ python -m src.selfplay.selfplay --output data/selfplay.pt --games 10 --simulatio
 Train a model that the current pygame PVE mode can load through `config.yaml`:
 
 ```sh
-python -m src.train.train --dataset data/selfplay.pt --output model/latest.pth --epochs 5 --device cpu
+python -m src.train.train --dataset data/selfplay.pt --output models/latest.pth --epochs 5 --device cpu
 ```
 
 For a tiny end-to-end smoke run, generate data during training:
@@ -87,7 +87,7 @@ For a tiny end-to-end smoke run, generate data during training:
 python -m src.train.train --generate-games 1 --simulations 4 --epochs 1 --device cpu
 ```
 
-The dataset file stores `state`, `legal_mask`, MCTS `policy` visit distributions, final `value` targets, and metadata for dataset format, rule version, board size, and model version. The training command saves a raw `AlphaNet` state dict to `model/latest.pth`, keeping it compatible with the pygame `GameAI` loader.
+The dataset file stores `state`, `legal_mask`, MCTS `policy` visit distributions, final `value` targets, and metadata for dataset format, rule version, board size, and model version. The training command saves a raw `AlphaNet` state dict to `models/latest.pth`, keeping it compatible with the pygame `GameAI` loader.
 
 To run self-play and training as one pipeline with progress bars:
 
@@ -100,7 +100,7 @@ that checkpoint for self-play MCTS and also initializes training from the same
 weights:
 
 ```sh
-python train_pipeline.py --checkpoint model/latest.pth --dataset data/selfplay_iter01.pt --output model/latest_iter01.pth --games 100 --simulations 128 --epochs 10 --device cuda
+python train_pipeline.py --checkpoint models/latest.pth --dataset data/selfplay_iter01.pt --output models/latest_iter01.pth --games 100 --simulations 128 --epochs 10 --device cuda
 ```
 
 Use `--init-checkpoint` to initialize training from a different model, or
@@ -114,11 +114,11 @@ python train_multistage.py --device cuda
 
 The default stages write independent datasets and checkpoints:
 
-- `data/stage1_bootstrap.pt` -> `model/stage1_bootstrap.pth`
-- `data/stage2_iter01.pt` -> `model/stage2_iter01.pth`
-- `data/stage3_iter02.pt` -> `model/stage3_iter02.pth`
-- `data/stage4_iter03.pt` -> `model/stage4_iter03.pth`
-- `data/stage5_final.pt` -> `model/stage5_final.pth`
+- `data/stage1_bootstrap.pt` -> `models/stage1_bootstrap.pth`
+- `data/stage2_iter01.pt` -> `models/stage2_iter01.pth`
+- `data/stage3_iter02.pt` -> `models/stage3_iter02.pth`
+- `data/stage4_iter03.pt` -> `models/stage4_iter03.pth`
+- `data/stage5_final.pt` -> `models/stage5_final.pth`
 
 Run it in the background on Windows PowerShell:
 

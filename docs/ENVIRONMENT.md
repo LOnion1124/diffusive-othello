@@ -117,7 +117,7 @@ Recommended improvement:
 
 ## Artifact Notes
 
-Large files under `data/` and `model/` should be treated as generated artifacts unless intentionally versioned.
+Large files under `data/` and `models/` should be treated as generated artifacts unless intentionally versioned.
 
 Recommended improvement:
 

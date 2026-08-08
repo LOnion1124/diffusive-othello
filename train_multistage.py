@@ -60,7 +60,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default=runtime_config["device"])
     parser.add_argument("--board-size", type=int, default=model_config["board_size"])
     parser.add_argument("--data-dir", default="data")
-    parser.add_argument("--model-dir", default="model")
+    parser.add_argument("--model-dir", default="models")
     parser.add_argument("--prefix", default="stage")
     parser.add_argument("--initial-checkpoint", default=None)
     parser.add_argument("--start-stage", type=int, default=1)

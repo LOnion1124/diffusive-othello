@@ -19,7 +19,7 @@ from src.train.train_utils import train_step
 def train_from_dataset(
     *,
     dataset_path: str | Path,
-    output_path: str | Path = "model/latest.pth",
+    output_path: str | Path = "models/latest.pth",
     init_checkpoint: str | Path | None = None,
     board_size: int | None = None,
     epochs: int = 5,

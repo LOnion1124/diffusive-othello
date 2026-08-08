@@ -19,7 +19,7 @@ DEFAULT_CFG: dict[str, Any] = {
     "ai": {
         "runtime": {
             "device": "auto",
-            "model_path": "model/latest.pth",
+            "model_path": "models/latest.pth",
         },
         "model": {
             "architecture": "alphanet",
@@ -45,7 +45,7 @@ DEFAULT_CFG: dict[str, Any] = {
         },
         "train": {
             "dataset_path": "data/selfplay.pt",
-            "output_path": "model/latest.pth",
+            "output_path": "models/latest.pth",
             "epochs": 10,
             "batch_size": 128,
             "lr": 1e-3,

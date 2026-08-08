@@ -7,11 +7,11 @@ def test_load_config_exposes_new_ai_sections():
     config = load_config()
 
     assert config["game"]["board_size"] == 9
-    assert config["ai"]["runtime"]["model_path"] == "model/latest.pth"
+    assert config["ai"]["runtime"]["model_path"] == "models/latest.pth"
     assert config["ai"]["model"]["architecture"] == "alphanet"
     assert config["ai"]["mcts"]["num_simulations"] > 0
     assert config["ai"]["self_play"]["output_path"].endswith(".pt")
-    assert config["ai"]["train"]["output_path"] == "model/latest.pth"
+    assert config["ai"]["train"]["output_path"] == "models/latest.pth"
 
 
 def test_alphanet_kwargs_match_config_schema():
@@ -30,7 +30,7 @@ def test_legacy_ai_config_fields_are_normalized(tmp_path):
     path.write_text(
         "\n".join(
             [
-                "model_path: model/old.pth",
+                "model_path: models/old.pth",
                 "use_cuda: false",
                 "board_size: 4",
                 "mcts:",
@@ -45,7 +45,7 @@ def test_legacy_ai_config_fields_are_normalized(tmp_path):
     config = load_config(Path(path))
 
     assert config["game"]["board_size"] == 4
-    assert config["ai"]["runtime"]["model_path"] == "model/old.pth"
+    assert config["ai"]["runtime"]["model_path"] == "models/old.pth"
     assert config["ai"]["runtime"]["device"] == "cpu"
     assert config["ai"]["model"]["board_size"] == 4
     assert config["ai"]["mcts"]["num_simulations"] == 8

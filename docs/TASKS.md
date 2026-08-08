@@ -80,7 +80,7 @@ Key issues:
 - Game rules, dataset generation, inference, MCTS, UI, and scripts are coupled through ad hoc data formats.
 - Configuration is loaded from `config.yaml` relative to the process working directory.
 - Dependencies are incomplete.
-- Large generated artifacts exist under `data/` and `model/`.
+- Large generated artifacts exist under `data/` and `models/`.
 - There is no test suite, reproducible training command, evaluation command, or checkpoint metadata.
 
 Target design:
@@ -223,7 +223,7 @@ Tasks:
   - optimizer settings;
   - dataset version;
   - evaluation results.
-- Add arena evaluation before replacing `model/latest.pth`.
+- Add arena evaluation before replacing `models/latest.pth`.
 - Track baseline win rates against random, heuristic, and previous model players.
 - Add CPU smoke tests for model forward pass and one tiny training step.
 
