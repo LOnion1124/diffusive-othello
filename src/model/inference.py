@@ -19,6 +19,7 @@ class GameAI:
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
             checkpoint = checkpoint["model_state_dict"]
         self.model.load_state_dict(checkpoint)
+        self.model.eval()
     
     def inference(self, board: list[list[int]], player: int):
         # board: provided by logic.board.getGrids()
@@ -39,8 +40,8 @@ class GameAI:
             device=self.device,
         )
         
-        self.model.eval()
-        log_policy, value = self.model(state.unsqueeze(0), legal_mask=mask.unsqueeze(0))
+        with torch.inference_mode():
+            log_policy, value = self.model(state.unsqueeze(0), legal_mask=mask.unsqueeze(0))
 
         target_idx = log_policy.view(-1).argmax().item()
         x, y = target_idx // board_size, target_idx % board_size

@@ -29,10 +29,21 @@ def main(argv: list[str] | None = None) -> int:
 
     pygame.init()
     controller = GameController(mode=args.mode, board_size=args.board_size)
-    screen = pygame.display.set_mode(PygameRenderer.screen_size(args.board_size))
+    show_winrate_bar = True
+    screen = pygame.display.set_mode(
+        PygameRenderer.screen_size(
+            args.board_size,
+            show_winrate_bar=show_winrate_bar,
+        )
+    )
     pygame.display.set_caption("Diffusive Othello")
 
-    renderer = PygameRenderer(pygame, screen, board_size=args.board_size)
+    renderer = PygameRenderer(
+        pygame,
+        screen,
+        board_size=args.board_size,
+        show_winrate_bar=show_winrate_bar,
+    )
     input_controller = PygameInputController(
         pygame,
         board_left_top=renderer.board_left_top,

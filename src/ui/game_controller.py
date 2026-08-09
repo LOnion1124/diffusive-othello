@@ -36,6 +36,17 @@ class MovePolicy(Protocol):
         """Return a legal move for the given state and player."""
 
 
+class WinRatePolicy(Protocol):
+    def predict_player_win_rate(
+        self,
+        state: GameState,
+        *,
+        current_player: int,
+        target_player: int,
+    ) -> float:
+        """Return the estimated target-player win rate for the current state."""
+
+
 @dataclass(frozen=True)
 class GameSnapshot:
     phase: str
@@ -47,6 +58,8 @@ class GameSnapshot:
     winner_name: str
     info: str
     mode: str
+    first_player_win_rate: float | None = None
+    win_rate_invalid: bool = False
     legal_place_moves: tuple[Move, ...] = ()
 
 
@@ -61,36 +74,59 @@ class FirstLegalMovePolicy:
 
 
 class LazyAiPolicy:
-    """Load the torch-backed AI only when a PVE game reaches the AI turn."""
+    """Load the torch-backed AI only when a feature needs inference."""
 
     def __init__(self) -> None:
         self._ai = None
+        self._load_error: RuntimeError | None = None
+
+    def predict_player_win_rate(
+        self,
+        state: GameState,
+        *,
+        current_player: int,
+        target_player: int,
+    ) -> float:
+        prediction = self._predict(state, current_player)
+        value = float(prediction["value"])
+        target_value = value if current_player == target_player else -value
+        return max(0.0, min(1.0, (target_value + 1.0) / 2.0))
 
     def select_move(self, state: GameState, player: int) -> Move:
-        if self._ai is None:
-            try:
-                from src.model.inference import GameAI
-            except Exception as exc:
-                raise RuntimeError(
-                    "AI dependencies could not be imported. Install requirements-ai.txt "
-                    "and ensure the configured model is available."
-                ) from exc
-
-            try:
-                self._ai = GameAI()
-            except Exception as exc:
-                raise RuntimeError(
-                    "AI model could not be loaded. Check config.yaml and the checkpoint path."
-                ) from exc
-
-        prediction = self._ai.inference(
-            board=[list(row) for row in state.board],
-            player=player,
-        )
+        prediction = self._predict(state, player)
         move = tuple(prediction["pos"])
         if move not in legal_moves(state, player):
             raise RuntimeError(f"AI returned illegal move {move} for player {player}.")
         return move
+
+    def _predict(self, state: GameState, player: int) -> dict:
+        ai = self._load_ai()
+        return ai.inference(
+            board=[list(row) for row in state.board],
+            player=player,
+        )
+
+    def _load_ai(self):
+        if self._load_error is not None:
+            raise self._load_error
+        if self._ai is None:
+            try:
+                from src.model.inference import GameAI
+            except Exception as exc:
+                self._load_error = RuntimeError(
+                    "AI dependencies could not be imported. Install requirements-ai.txt "
+                    "and ensure the configured model is available."
+                )
+                raise self._load_error from exc
+
+            try:
+                self._ai = GameAI()
+            except Exception as exc:
+                self._load_error = RuntimeError(
+                    "AI model could not be loaded. Check config.yaml and the checkpoint path."
+                )
+                raise self._load_error from exc
+        return self._ai
 
 
 class GameController:
@@ -123,6 +159,9 @@ class GameController:
         self.winner = EMPTY
         self.winner_name = ""
         self.info = "Diffusive Othello"
+        self.first_player_win_rate: float | None = None
+        self.win_rate_invalid = False
+        self._win_rate_error_reported = False
 
     @property
     def current_player(self) -> int:
@@ -152,6 +191,8 @@ class GameController:
             winner_name=self.winner_name,
             info=self.info,
             mode=self.mode,
+            first_player_win_rate=self.first_player_win_rate,
+            win_rate_invalid=self.win_rate_invalid,
             legal_place_moves=legal_place_moves,
         )
 
@@ -166,8 +207,12 @@ class GameController:
         self.phase = PHASE_GAME
         self.winner = EMPTY
         self.winner_name = ""
+        self.first_player_win_rate = None
+        self.win_rate_invalid = False
+        self._win_rate_error_reported = False
         self.info = self._turn_info(self.current_player)
         self._settle_turn()
+        self._refresh_first_player_win_rate()
 
     def handle_click(self, clicked: bool, move: Move | None = None) -> bool:
         if not clicked:
@@ -199,6 +244,7 @@ class GameController:
 
         self.state = apply_move(self.state, player, move).state
         self._settle_turn()
+        self._refresh_first_player_win_rate()
         return True
 
     def play_ai_turn(self) -> bool:
@@ -217,6 +263,7 @@ class GameController:
 
         self.state = apply_move(self.state, player, move).state
         self._settle_turn(keep_existing_info=fallback_used)
+        self._refresh_first_player_win_rate()
         return True
 
     @property
@@ -275,7 +322,42 @@ class GameController:
         )
         self.phase = PHASE_END
         self.info = "Game over."
+        self.win_rate_invalid = False
+        if game_winner == EMPTY:
+            self.first_player_win_rate = 0.5
+        else:
+            self.first_player_win_rate = 1.0 if game_winner == PLAYER_ONE else 0.0
 
     def _report_ai_error(self, error: Exception) -> None:
         if self.error_sink is not None:
             self.error_sink(f"PVE AI inference failed: {error}")
+
+    def _refresh_first_player_win_rate(self) -> None:
+        if self.state is None:
+            self.first_player_win_rate = None
+            self.win_rate_invalid = False
+            return
+
+        if self.phase == PHASE_END:
+            return
+
+        predictor = getattr(self.ai_policy, "predict_player_win_rate", None)
+        if predictor is None:
+            self.first_player_win_rate = 0.5
+            self.win_rate_invalid = True
+            return
+
+        try:
+            self.first_player_win_rate = predictor(
+                self.state,
+                current_player=self.current_player,
+                target_player=PLAYER_ONE,
+            )
+            self.win_rate_invalid = False
+            self._win_rate_error_reported = False
+        except Exception as exc:
+            self.first_player_win_rate = 0.5
+            self.win_rate_invalid = True
+            if self.error_sink is not None and not self._win_rate_error_reported:
+                self.error_sink(f"Win-rate prediction failed: {exc}")
+                self._win_rate_error_reported = True

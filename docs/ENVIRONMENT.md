@@ -47,7 +47,9 @@ Required dependencies:
 Expected behavior:
 
 - `python gui.py --mode PVP` should not require torch.
-- PVP should not load model files.
+- PVP should show the win-rate prediction bar during gameplay.
+- PVP should attempt to load the configured model for prediction when available,
+  and show `Invalid` at 50:50 when model loading or inference fails.
 
 ### PVE Desktop Game
 
@@ -61,8 +63,10 @@ Required dependencies:
 
 Expected behavior:
 
-- `python gui.py --mode PVE` should load AI lazily.
-- Missing model dependencies should produce a clear error message.
+- `python gui.py --mode PVE` should enable the first-player vs. second-player
+  win-rate prediction bar during gameplay.
+- Missing model dependencies should put the bar in the `Invalid` 50:50 state,
+  produce a clear error message, and use fallback legal moves for AI turns.
 
 ### Training and Self-Play
 
@@ -117,7 +121,8 @@ Current behavior:
 - `config.yaml` is resolved relative to the repository root.
 - `game.board_size` controls the default desktop board size.
 - `ai.runtime.device` controls AI device selection: `auto`, `cpu`, or `cuda`.
-- `ai.runtime.model_path` controls the pygame PVE checkpoint path.
+- `ai.runtime.model_path` controls the pygame checkpoint path used by the
+  desktop win-rate bar and PVE AI moves.
 - `ai.self_play` and `ai.train` define generated data and checkpoint defaults.
 
 ## Dataset Format Notes

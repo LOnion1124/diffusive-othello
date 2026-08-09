@@ -125,20 +125,23 @@ Acceptance criteria:
 
 Goal: keep the desktop game usable while decoupling it from AI and training code.
 
-Status: implemented. The desktop client now enters through thin `gui.py`, with game flow in `src/ui/game_controller.py`, input mapping in `src/ui/input_controller.py`, rendering in `src/ui/pygame_renderer.py`, and the pygame loop in `src/ui/pygame_app.py`. PVP no longer imports AI code, and PVE lazy-loads AI with a first-legal-move fallback when inference cannot run.
+Status: implemented. The desktop client now enters through thin `gui.py`, with game flow in `src/ui/game_controller.py`, input mapping in `src/ui/input_controller.py`, rendering in `src/ui/pygame_renderer.py`, and the pygame loop in `src/ui/pygame_app.py`. PVP and PVE both attempt model-backed first-player vs. second-player win-rate prediction during gameplay; when model loading or inference fails, the bar locks to 50:50 and displays `Invalid`. PVE also uses a first-legal-move fallback when AI move inference cannot run.
 
 Tasks:
 
 - Move pygame app code into a package such as `src/ui/pygame_app.py`.
 - Keep top-level `gui.py` as a thin entry point.
 - Split renderer, input handling, and game-controller logic.
-- Delay-load AI only in PVE mode.
+- Delay-load AI prediction in gameplay.
 - Add a fallback legal-move policy if AI inference fails.
-- Ensure PVP works without torch or model files installed.
+- Ensure PVP works without torch or model files installed by showing an invalid
+  win-rate prediction state.
+- Show first-player vs. second-player win-rate prediction in PVE and PVP.
 
 Acceptance criteria:
 
-- `python gui.py --mode PVP` runs in a minimal pygame environment.
+- `python gui.py --mode PVP` runs in a minimal pygame environment with the
+  win-rate bar marked invalid when optional AI dependencies are missing.
 - `python gui.py --mode PVE` reports clear errors when model dependencies are missing.
 - UI code does not access private board internals.
 
