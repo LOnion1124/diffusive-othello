@@ -46,7 +46,9 @@ Required dependencies:
 
 Expected behavior:
 
-- `python gui.py --mode PVP` should not require torch.
+- `python gui.py` opens a start screen where `Play PvP` starts PVP.
+- `python gui.py --mode PVP` remains available as a quick start and should not
+  require torch.
 - PVP should show the win-rate prediction bar during gameplay.
 - PVP should attempt to load the configured model for prediction when available,
   and show `Invalid` at 50:50 when model loading or inference fails.
@@ -63,8 +65,10 @@ Required dependencies:
 
 Expected behavior:
 
-- `python gui.py --mode PVE` should enable the first-player vs. second-player
-  win-rate prediction bar during gameplay.
+- `python gui.py` opens a start screen where `Play PvE` starts PVE.
+- `python gui.py --mode PVE` remains available as a quick start and should
+  enable the first-player vs. second-player win-rate prediction bar during
+  gameplay.
 - Missing model dependencies should put the bar in the `Invalid` 50:50 state,
   produce a clear error message, and use fallback legal moves for AI turns.
 

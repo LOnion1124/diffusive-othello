@@ -133,6 +133,80 @@ def test_controller_marks_win_rate_invalid_when_prediction_is_unavailable():
     assert snapshot.win_rate_invalid
 
 
+def test_start_click_requires_mode_selection():
+    controller = GameController(
+        mode=MODE_PVP,
+        board_size=4,
+        ai_policy=FailingPolicy(),
+        error_sink=None,
+    )
+
+    assert not controller.handle_click(True)
+    assert controller.phase == PHASE_START
+
+    assert controller.handle_click(True, start_mode=MODE_PVE)
+    assert controller.phase == PHASE_GAME
+    assert controller.mode == MODE_PVE
+
+
+def test_end_click_returns_to_start_screen():
+    controller = GameController(
+        mode=MODE_PVP,
+        board_size=4,
+        ai_policy=FailingPolicy(),
+        error_sink=None,
+    )
+    controller.state = state_from_board(
+        [
+            [PLAYER_ONE, PLAYER_ONE, PLAYER_ONE, PLAYER_ONE],
+            [PLAYER_ONE, PLAYER_ONE, PLAYER_ONE, PLAYER_ONE],
+            [PLAYER_ONE, PLAYER_ONE, PLAYER_ONE, PLAYER_ONE],
+            [PLAYER_ONE, PLAYER_ONE, PLAYER_ONE, PLAYER_ONE],
+        ]
+    )
+    controller._end_game()
+
+    assert controller.phase == PHASE_END
+    assert controller.handle_click(True)
+    assert controller.phase == PHASE_START
+    assert controller.state is None
+    assert controller.info == "Diffusive Othello"
+
+
+def test_pve_winner_name_uses_human_and_computer_labels():
+    controller = GameController(
+        mode=MODE_PVE,
+        board_size=4,
+        ai_policy=FailingPolicy(),
+        error_sink=None,
+    )
+    controller.human_player = PLAYER_ONE
+    controller.ai_player = PLAYER_TWO
+    controller.state = state_from_board(
+        [
+            [PLAYER_ONE, PLAYER_ONE, PLAYER_ONE, PLAYER_ONE],
+            [PLAYER_ONE, PLAYER_ONE, PLAYER_ONE, PLAYER_ONE],
+            [PLAYER_ONE, PLAYER_ONE, PLAYER_ONE, PLAYER_ONE],
+            [PLAYER_ONE, PLAYER_ONE, PLAYER_ONE, PLAYER_TWO],
+        ]
+    )
+
+    controller._end_game()
+    assert controller.winner_name == "You"
+
+    controller.state = state_from_board(
+        [
+            [PLAYER_TWO, PLAYER_TWO, PLAYER_TWO, PLAYER_TWO],
+            [PLAYER_TWO, PLAYER_TWO, PLAYER_TWO, PLAYER_TWO],
+            [PLAYER_TWO, PLAYER_TWO, PLAYER_TWO, PLAYER_TWO],
+            [PLAYER_TWO, PLAYER_TWO, PLAYER_TWO, PLAYER_ONE],
+        ]
+    )
+
+    controller._end_game()
+    assert controller.winner_name == "Computer"
+
+
 def test_renderer_only_shows_win_rate_bar_during_gameplay():
     renderer = object.__new__(PygameRenderer)
     renderer.show_winrate_bar = True
@@ -190,6 +264,19 @@ def test_renderer_only_shows_win_rate_bar_during_gameplay():
     assert renderer._should_draw_winrate_bar(pvp_snapshot)
 
 
+def test_renderer_maps_start_buttons_to_modes():
+    renderer = object.__new__(PygameRenderer)
+    renderer.board_left_top = (0, 80)
+    renderer.board_length = 240
+
+    pvp_rect = renderer._start_button_rects()[MODE_PVP]
+    pve_rect = renderer._start_button_rects()[MODE_PVE]
+
+    assert renderer.start_mode_at(_rect_center(pvp_rect)) == MODE_PVP
+    assert renderer.start_mode_at(_rect_center(pve_rect)) == MODE_PVE
+    assert renderer.start_mode_at((0, 0)) is None
+
+
 def test_renderer_formats_win_rate_label_as_score_pair():
     assert PygameRenderer._format_winrate_label(0.73) == "73 : 27"
     assert PygameRenderer._format_winrate_label(None) == "50 : 50"
@@ -218,3 +305,8 @@ def test_pve_controller_can_assign_ai_as_first_player(monkeypatch):
 def test_unknown_ui_mode_is_rejected():
     with pytest.raises(ValueError):
         GameController(mode="solo")
+
+
+def _rect_center(rect):
+    left, top, width, height = rect
+    return (left + width // 2, top + height // 2)

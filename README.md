@@ -32,11 +32,12 @@ pip install -r requirements-ai.txt
 Play with GUI made by pygame:
 
 ```sh
-# play PVE (use model in config.yaml)
-python gui.py --mode PVE
-# play PVP
-python gui.py --mode PVP
+python gui.py
 ```
+
+The start screen lets you choose `Play PvP` or `Play PvE`. For scripted quick
+starts, `python gui.py --mode PVP` and `python gui.py --mode PVE` are still
+available.
 
 Both GUI modes show a first-player vs. second-player win-rate prediction bar during gameplay. The bar attempts to load the configured model in either PVP or PVE; if the model or optional AI dependencies are unavailable, it locks to 50:50 and displays `Invalid`. PVE also reports the error in the terminal and uses a simple legal-move fallback for AI moves.
 
