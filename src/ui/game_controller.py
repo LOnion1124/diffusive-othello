@@ -139,11 +139,7 @@ class GameController:
         fallback_policy: MovePolicy | None = None,
         error_sink: Callable[[str], None] | None = print,
     ) -> None:
-        normalized_mode = mode.upper()
-        if normalized_mode not in (MODE_PVP, MODE_PVE):
-            raise ValueError("mode must be PVP or PVE.")
-
-        self.mode = normalized_mode
+        self.mode = self._normalize_mode(mode)
         self.board_size = board_size
         self.player_names = {PLAYER_ONE: "Player1", PLAYER_TWO: "Player2"}
         self.human_player = PLAYER_ONE
@@ -196,7 +192,9 @@ class GameController:
             legal_place_moves=legal_place_moves,
         )
 
-    def start_game(self) -> None:
+    def start_game(self, mode: str | None = None) -> None:
+        if mode is not None:
+            self.mode = self._normalize_mode(mode)
         self.state = new_game(self.board_size)
         if self.mode == MODE_PVE:
             self.human_player = random.choice(PLAYERS)
@@ -214,12 +212,34 @@ class GameController:
         self._settle_turn()
         self._refresh_first_player_win_rate()
 
-    def handle_click(self, clicked: bool, move: Move | None = None) -> bool:
+    def return_to_start(self) -> None:
+        self.phase = PHASE_START
+        self.state = None
+        self.winner = EMPTY
+        self.winner_name = ""
+        self.info = "Diffusive Othello"
+        self.first_player_win_rate = None
+        self.win_rate_invalid = False
+        self._win_rate_error_reported = False
+
+    def handle_click(
+        self,
+        clicked: bool,
+        move: Move | None = None,
+        *,
+        start_mode: str | None = None,
+    ) -> bool:
         if not clicked:
             return False
 
-        if self.phase in (PHASE_START, PHASE_END):
-            self.start_game()
+        if self.phase == PHASE_START:
+            if start_mode is None:
+                return False
+            self.start_game(start_mode)
+            return True
+
+        if self.phase == PHASE_END:
+            self.return_to_start()
             return True
 
         if self.phase != PHASE_GAME or self.state is None:
@@ -317,9 +337,7 @@ class GameController:
 
         game_winner = winner(self.state)
         self.winner = game_winner
-        self.winner_name = (
-            "Draw" if game_winner == EMPTY else self.player_names[game_winner]
-        )
+        self.winner_name = self._winner_name(game_winner)
         self.phase = PHASE_END
         self.info = "Game over."
         self.win_rate_invalid = False
@@ -361,3 +379,17 @@ class GameController:
             if self.error_sink is not None and not self._win_rate_error_reported:
                 self.error_sink(f"Win-rate prediction failed: {exc}")
                 self._win_rate_error_reported = True
+
+    @staticmethod
+    def _normalize_mode(mode: str) -> str:
+        normalized_mode = mode.upper()
+        if normalized_mode not in (MODE_PVP, MODE_PVE):
+            raise ValueError("mode must be PVP or PVE.")
+        return normalized_mode
+
+    def _winner_name(self, game_winner: int) -> str:
+        if game_winner == EMPTY:
+            return "Draw"
+        if self.mode == MODE_PVE:
+            return "You" if game_winner == self.human_player else "Computer"
+        return self.player_names[game_winner]

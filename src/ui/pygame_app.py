@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 
 from src.config import get_game_config
-from src.ui.game_controller import GameController, MODE_PVE, MODE_PVP
+from src.ui.game_controller import GameController, MODE_PVE, MODE_PVP, PHASE_START
 from src.ui.input_controller import PygameInputController
 from src.ui.pygame_renderer import PygameRenderer
 
@@ -17,7 +17,12 @@ AI_COOLDOWN_MS = 300
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     game_config = get_game_config()
     parser = argparse.ArgumentParser(description="Play Diffusive Othello.")
-    parser.add_argument("--mode", choices=(MODE_PVP, MODE_PVE), default=MODE_PVP)
+    parser.add_argument(
+        "--mode",
+        choices=(MODE_PVP, MODE_PVE),
+        default=None,
+        help="Optional quick start mode. Omit to choose from the start screen.",
+    )
     parser.add_argument("--board-size", type=int, default=game_config["board_size"])
     return parser.parse_args(argv)
 
@@ -28,7 +33,9 @@ def main(argv: list[str] | None = None) -> int:
     import pygame
 
     pygame.init()
-    controller = GameController(mode=args.mode, board_size=args.board_size)
+    controller = GameController(mode=args.mode or MODE_PVP, board_size=args.board_size)
+    if args.mode is not None:
+        controller.start_game(args.mode)
     show_winrate_bar = True
     screen = pygame.display.set_mode(
         PygameRenderer.screen_size(
@@ -61,7 +68,10 @@ def main(argv: list[str] | None = None) -> int:
 
             previous_phase = controller.phase
             previous_player = controller.current_player
-            controller.handle_click(pointer.clicked, pointer.move)
+            start_mode = None
+            if controller.phase == PHASE_START:
+                start_mode = renderer.start_mode_at(pointer.position)
+            controller.handle_click(pointer.clicked, pointer.move, start_mode=start_mode)
             if (
                 controller.phase != previous_phase
                 or controller.current_player != previous_player

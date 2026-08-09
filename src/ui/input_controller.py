@@ -11,6 +11,7 @@ from src.game.state import Move
 class PointerInput:
     quit_requested: bool = False
     clicked: bool = False
+    position: tuple[int, int] | None = None
     move: Move | None = None
 
 
@@ -31,6 +32,7 @@ class PygameInputController:
     def poll(self) -> PointerInput:
         clicked = False
         move = None
+        position = None
         quit_requested = False
 
         for event in self.pygame.event.get():
@@ -38,11 +40,13 @@ class PygameInputController:
                 quit_requested = True
             elif event.type == self.pygame.MOUSEBUTTONDOWN:
                 clicked = True
-                move = self.pos_to_grid(*self.pygame.mouse.get_pos())
+                position = self.pygame.mouse.get_pos()
+                move = self.pos_to_grid(*position)
 
         return PointerInput(
             quit_requested=quit_requested,
             clicked=clicked,
+            position=position if clicked else None,
             move=move,
         )
 

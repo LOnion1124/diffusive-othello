@@ -5,6 +5,8 @@ from __future__ import annotations
 from src.game.state import PLAYER_ONE, PLAYER_TWO
 from src.ui.game_controller import (
     GameSnapshot,
+    MODE_PVE,
+    MODE_PVP,
     PHASE_END,
     PHASE_GAME,
     PHASE_START,
@@ -23,8 +25,10 @@ class PygameRenderer:
     COLOR_PLAYER2 = (0, 255, 255)
     COLOR_TEXT = (255, 255, 255)
     COLOR_PANEL = (165, 42, 42)
+    COLOR_BUTTON = COLOR_PANEL
+    COLOR_BUTTON_BORDER = (235, 235, 235)
     COLOR_MOVE_HINT = (240, 240, 240)
-    COLOR_WINRATE_BACKGROUND = COLOR_BACKGROUND
+    COLOR_WINRATE_BACKGROUND = COLOR_PANEL
     COLOR_WINRATE_BORDER = (230, 230, 230)
 
     def __init__(
@@ -78,7 +82,22 @@ class PygameRenderer:
 
     def _draw_start(self) -> None:
         self._draw_panel_background()
-        self._draw_panel_title("CLICK TO START")
+        top = self.SCOREBOARD_HEIGHT
+        height = self.board_left_top[1] - self.SCOREBOARD_HEIGHT + self.board_length
+        title_center = (
+            self.board_left_top[0] + (self.board_length // 2),
+            top + round(height * 0.28),
+        )
+        title_text = self.font_large.render("Diffusive Othello", True, self.COLOR_TEXT)
+        title_rect = title_text.get_rect(center=title_center)
+        self.screen.blit(title_text, title_rect)
+
+        button_labels = {
+            MODE_PVP: "Play PvP",
+            MODE_PVE: "Play PvE",
+        }
+        for mode, rect in self._start_button_rects().items():
+            self._draw_start_button(button_labels[mode], rect)
 
     def _draw_game(self, snapshot: GameSnapshot) -> None:
         self._draw_board_background(self.COLOR_BACKGROUND)
@@ -238,6 +257,14 @@ class PygameRenderer:
             and snapshot.phase == PHASE_GAME
         )
 
+    def start_mode_at(self, position: tuple[int, int] | None) -> str | None:
+        if position is None:
+            return None
+        for mode, rect in self._start_button_rects().items():
+            if self._point_in_rect(position, rect):
+                return mode
+        return None
+
     @staticmethod
     def _format_winrate_label(
         first_rate: float | None,
@@ -279,3 +306,45 @@ class PygameRenderer:
         title_text = self.font_large.render(text, True, self.COLOR_TEXT)
         title_rect = title_text.get_rect(center=center)
         self.screen.blit(title_text, title_rect)
+
+    def _draw_start_button(self, label: str, rect: tuple[int, int, int, int]) -> None:
+        self.pygame.draw.rect(self.screen, self.COLOR_BUTTON, rect)
+        self.pygame.draw.rect(self.screen, self.COLOR_BUTTON_BORDER, rect, width=2)
+        label_text = self.font_small.render(label, True, self.COLOR_TEXT)
+        x, y, width, height = rect
+        label_rect = label_text.get_rect(center=(x + width // 2, y + height // 2))
+        self.screen.blit(label_text, label_rect)
+
+    def _start_button_rects(self) -> dict[str, tuple[int, int, int, int]]:
+        panel_top = self.SCOREBOARD_HEIGHT
+        panel_height = self.board_left_top[1] - self.SCOREBOARD_HEIGHT + self.board_length
+        button_width = min(220, max(140, self.board_length - 80))
+        button_height = 46
+        left = self.board_left_top[0] + (self.board_length - button_width) // 2
+        centers = (
+            panel_top + round(panel_height * 0.48),
+            panel_top + round(panel_height * 0.60),
+        )
+        return {
+            MODE_PVP: (
+                left,
+                centers[0] - button_height // 2,
+                button_width,
+                button_height,
+            ),
+            MODE_PVE: (
+                left,
+                centers[1] - button_height // 2,
+                button_width,
+                button_height,
+            ),
+        }
+
+    @staticmethod
+    def _point_in_rect(
+        position: tuple[int, int],
+        rect: tuple[int, int, int, int],
+    ) -> bool:
+        x_pos, y_pos = position
+        left, top, width, height = rect
+        return left <= x_pos < left + width and top <= y_pos < top + height
