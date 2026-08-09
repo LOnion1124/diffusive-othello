@@ -1,0 +1,27 @@
+{
+  "board_size": 9,
+  "model_config": {
+    "board_size": 9,
+    "in_channels": 3,
+    "num_filters": 96,
+    "num_res_blocks": 6,
+    "value_hidden_dim": 128
+  },
+  "dataset_path": "data\\stage5_final.pt",
+  "init_checkpoint": "models\\stage4_iter03.pth",
+  "dataset_format_version": "az-do-dataset-v2",
+  "rule_version": "diffusive-othello-rules-v2",
+  "dataset_model_version": "alphanet-v2",
+  "sample_count": 154000,
+  "game_count": 2000,
+  "epochs": 5,
+  "batch_size": 256,
+  "lr": 0.0001,
+  "weight_decay": 0.0001,
+  "optimizer": "Adam",
+  "steps": 3010,
+  "output_path": "models\\stage5_final.pth",
+  "last_loss": 1.970700979232788,
+  "last_policy_loss": 1.7298840284347534,
+  "last_value_loss": 0.2408169060945511
+}
