@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from src.config import get_game_config
 from src.ui.game_controller import GameController, MODE_PVE, MODE_PVP, PHASE_START
@@ -12,6 +13,7 @@ from src.ui.pygame_renderer import PygameRenderer
 
 FPS = 60
 AI_COOLDOWN_MS = 300
+GUI_ICON_PATH = Path(__file__).resolve().parents[2] / "assets" / "gui" / "favicon-32x32.png"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -33,10 +35,12 @@ def main(argv: list[str] | None = None) -> int:
     import pygame
 
     pygame.init()
+    icon = pygame.image.load(GUI_ICON_PATH)
     controller = GameController(mode=args.mode or MODE_PVP, board_size=args.board_size)
     if args.mode is not None:
         controller.start_game(args.mode)
     show_winrate_bar = True
+    pygame.display.set_icon(icon)
     screen = pygame.display.set_mode(
         PygameRenderer.screen_size(
             args.board_size,
