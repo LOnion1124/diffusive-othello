@@ -8,6 +8,14 @@ import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from src.train.arena import (
+    ArenaConfig,
+    promote_if_stronger,
+    run_checkpoint_arena,
+    save_arena_result,
+    should_promote,
+    update_checkpoint_metadata,
+)
 from src.config import (
     add_alphanet_model_args,
     apply_alphanet_arg_overrides,
@@ -52,6 +60,18 @@ DEFAULT_STAGES = (
     StageSpec(5, "final", games=2000, simulations=256, epochs=5, batch_size=256, lr=1e-4),
 )
 
+# A continuation round intentionally repeats the current stage-5 workload.
+# Its index is the round number, not the original curriculum stage number.
+CONTINUATION_STAGE = StageSpec(
+    index=1,
+    name="stage5",
+    games=2000,
+    simulations=256,
+    epochs=5,
+    batch_size=256,
+    lr=1e-4,
+)
+
 
 def parse_args() -> argparse.Namespace:
     ai_config = get_ai_config()
@@ -59,18 +79,35 @@ def parse_args() -> argparse.Namespace:
     runtime_config = ai_config["runtime"]
     train_config = ai_config["train"]
     self_play_config = ai_config["self_play"]
+    mcts_config = ai_config["mcts"]
 
     parser = argparse.ArgumentParser(
         description="Run multi-stage self-play and continued AlphaNet training."
     )
     parser.add_argument("--device", default=runtime_config["device"])
     parser.add_argument("--board-size", type=int, default=model_config["board_size"])
+    parser.add_argument(
+        "--schedule",
+        choices=("full", "continue"),
+        default="full",
+        help="Use 'continue' to repeat stage-5 strength from the incumbent checkpoint.",
+    )
     parser.add_argument("--data-dir", default="data")
     parser.add_argument("--model-dir", default="models")
-    parser.add_argument("--prefix", default="stage")
+    parser.add_argument("--prefix", default=None)
     parser.add_argument("--initial-checkpoint", default=None)
-    parser.add_argument("--start-stage", type=int, default=1)
-    parser.add_argument("--end-stage", type=int, default=5)
+    parser.add_argument(
+        "--start-stage",
+        type=int,
+        default=None,
+        help="Curriculum stage for 'full', or continuation round number for 'continue'.",
+    )
+    parser.add_argument(
+        "--end-stage",
+        type=int,
+        default=None,
+        help="Last curriculum stage or continuation round to run.",
+    )
     parser.add_argument("--include-smoke", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
@@ -88,16 +125,43 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--seed-base", type=int, default=1000)
     parser.add_argument("--no-root-noise", action="store_true")
+    parser.add_argument(
+        "--arena-games",
+        type=int,
+        default=40,
+        help="Even number of balanced arena games for each continuation round.",
+    )
+    parser.add_argument(
+        "--arena-simulations",
+        type=int,
+        default=None,
+        help="MCTS simulations per arena move (defaults to the continuation stage setting).",
+    )
+    parser.add_argument("--arena-c-puct", type=float, default=mcts_config["c_puct"])
+    parser.add_argument("--arena-seed-base", type=int, default=9000)
+    parser.add_argument(
+        "--arena-minimum-score",
+        type=float,
+        default=0.5,
+        help="Candidate score must strictly exceed this value to replace the incumbent.",
+    )
     add_alphanet_model_args(parser, model_config)
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    selected_stages = select_stages(
-        include_smoke=args.include_smoke,
+    validate_continuation_options(args)
+    start_stage, end_stage = stage_bounds_for_schedule(
+        args.schedule,
         start_stage=args.start_stage,
         end_stage=args.end_stage,
+    )
+    selected_stages = select_stages(
+        include_smoke=args.include_smoke,
+        start_stage=start_stage,
+        end_stage=end_stage,
+        schedule=args.schedule,
     )
     if not selected_stages:
         raise SystemExit("No stages selected.")
@@ -108,7 +172,10 @@ def main() -> int:
     mcts_config = ai_config["mcts"]
     data_dir = Path(args.data_dir)
     model_dir = Path(args.model_dir)
-    manifest_path = Path(args.manifest) if args.manifest else model_dir / f"{args.prefix}_manifest.json"
+    prefix = args.prefix or ("continue" if args.schedule == "continue" else "stage")
+    manifest_path = Path(args.manifest) if args.manifest else model_dir / f"{prefix}_manifest.json"
+    latest_path = Path(args.latest_path)
+    arena_promotion = args.schedule == "continue"
 
     print(f"Using device: {device}", flush=True)
     print(
@@ -116,105 +183,208 @@ def main() -> int:
         + ", ".join(f"{stage.index}:{stage.name}" for stage in selected_stages),
         flush=True,
     )
+    if arena_promotion:
+        print(
+            "Continuation schedule: each candidate is evaluated against the current "
+            f"baseline and promoted only after an arena win (default: {latest_path}).",
+            flush=True,
+        )
+        if args.promote_latest:
+            print("Ignoring --promote-latest for the continuation schedule; arena decides promotion.", flush=True)
 
-    previous_checkpoint = resolve_initial_checkpoint(
-        args.initial_checkpoint,
-        selected_stages[0],
-        include_smoke=args.include_smoke,
-        model_dir=model_dir,
-        prefix=args.prefix,
-    )
+    if arena_promotion:
+        baseline_path = Path(args.initial_checkpoint or latest_path)
+        if not baseline_path.is_file():
+            raise SystemExit(
+                "Continuation training needs an existing baseline checkpoint. "
+                f"Expected {baseline_path}; pass --initial-checkpoint to use another one."
+            )
+        previous_checkpoint = str(baseline_path)
+    else:
+        previous_checkpoint = resolve_initial_checkpoint(
+            args.initial_checkpoint,
+            selected_stages[0],
+            include_smoke=args.include_smoke,
+            model_dir=model_dir,
+            prefix=prefix,
+        )
     records: list[dict] = []
 
     for stage in selected_stages:
-        dataset_path, output_path = stage_paths(stage, data_dir=data_dir, model_dir=model_dir, prefix=args.prefix)
+        dataset_path, output_path = stage_paths(
+            stage,
+            data_dir=data_dir,
+            model_dir=model_dir,
+            prefix=prefix,
+        )
         checkpoint = previous_checkpoint
+        skipped = output_path.exists() and args.resume
+        metadata: dict | None = None
 
-        if output_path.exists() and args.resume:
-            print(f"\n[{stage.index}:{stage.name}] existing model found, skipping: {output_path}", flush=True)
-            previous_checkpoint = str(output_path)
-            records.append(stage_record(stage, dataset_path, output_path, checkpoint, skipped=True))
-            continue
-
-        ensure_outputs_are_available(
-            dataset_path,
-            output_path,
-            overwrite=args.overwrite,
-        )
-
-        print(f"\n[{stage.index}:{stage.name}] self-play", flush=True)
-        if checkpoint is not None:
-            print(f"Checkpoint: {checkpoint}", flush=True)
+        if skipped:
+            print(
+                f"\n[{stage.index}:{stage.name}] existing candidate found, skipping training: {output_path}",
+                flush=True,
+            )
         else:
-            print("Checkpoint: none (uniform bootstrap)", flush=True)
+            ensure_outputs_are_available(
+                dataset_path,
+                output_path,
+                overwrite=args.overwrite,
+            )
 
-        self_play_model = load_model_for_self_play(
-            checkpoint,
-            board_size=args.board_size,
-            device=device,
-            model_kwargs=model_config,
-        )
-        dataset = generate_self_play_dataset(
-            model=self_play_model,
-            device=device,
-            config=SelfPlayConfig(
+            print(f"\n[{stage.index}:{stage.name}] self-play", flush=True)
+            if checkpoint is not None:
+                print(f"Checkpoint: {checkpoint}", flush=True)
+            else:
+                print("Checkpoint: none (uniform bootstrap)", flush=True)
+
+            self_play_model = load_model_for_self_play(
+                checkpoint,
                 board_size=args.board_size,
-                games=stage.games,
-                num_simulations=stage.simulations,
-                c_puct=mcts_config["c_puct"],
-                dirichlet_alpha=mcts_config["dirichlet_alpha"],
-                dirichlet_epsilon=mcts_config["dirichlet_epsilon"],
-                temperature=args.temperature,
-                temperature_drop_move=args.temperature_drop_move,
-                seed=args.seed_base + stage.index,
-                add_root_noise=(mcts_config["add_root_noise"] and not args.no_root_noise),
-                model_version=ai_config["model"]["version"],
-                batch_size=args.self_play_batch_size,
-                workers=args.self_play_workers,
-            ),
-            model_kwargs=model_config,
-            save_path=dataset_path,
-            show_progress=True,
-            progress_desc=f"Stage {stage.index} self-play",
-        )
-        print(f"[{stage.index}:{stage.name}] saved {len(dataset)} samples to {dataset_path}", flush=True)
+                device=device,
+                model_kwargs=model_config,
+            )
+            dataset = generate_self_play_dataset(
+                model=self_play_model,
+                device=device,
+                config=SelfPlayConfig(
+                    board_size=args.board_size,
+                    games=stage.games,
+                    num_simulations=stage.simulations,
+                    c_puct=mcts_config["c_puct"],
+                    dirichlet_alpha=mcts_config["dirichlet_alpha"],
+                    dirichlet_epsilon=mcts_config["dirichlet_epsilon"],
+                    temperature=args.temperature,
+                    temperature_drop_move=args.temperature_drop_move,
+                    seed=args.seed_base + stage.index,
+                    add_root_noise=(mcts_config["add_root_noise"] and not args.no_root_noise),
+                    model_version=ai_config["model"]["version"],
+                    batch_size=args.self_play_batch_size,
+                    workers=args.self_play_workers,
+                ),
+                model_kwargs=model_config,
+                save_path=dataset_path,
+                show_progress=True,
+                progress_desc=f"Stage {stage.index} self-play",
+            )
+            print(f"[{stage.index}:{stage.name}] saved {len(dataset)} samples to {dataset_path}", flush=True)
 
-        print(f"[{stage.index}:{stage.name}] training", flush=True)
-        metadata = train_from_dataset(
-            dataset_path=dataset_path,
-            output_path=output_path,
-            init_checkpoint=checkpoint,
-            board_size=args.board_size,
-            epochs=stage.epochs,
-            batch_size=stage.batch_size,
-            lr=stage.lr,
-            weight_decay=args.weight_decay,
-            device=device,
-            model_kwargs=model_config,
-            show_progress=True,
-        )
-        print(
-            "[{index}:{name}] saved {output_path} "
-            "(steps={steps}, loss={loss:.4f}, policy={policy:.4f}, value={value:.4f})".format(
-                index=stage.index,
-                name=stage.name,
+            print(f"[{stage.index}:{stage.name}] training", flush=True)
+            metadata = train_from_dataset(
+                dataset_path=dataset_path,
                 output_path=output_path,
-                steps=metadata["steps"],
-                loss=metadata["last_loss"],
-                policy=metadata["last_policy_loss"],
-                value=metadata["last_value_loss"],
-            ),
-            flush=True,
+                init_checkpoint=checkpoint,
+                board_size=args.board_size,
+                epochs=stage.epochs,
+                batch_size=stage.batch_size,
+                lr=stage.lr,
+                weight_decay=args.weight_decay,
+                device=device,
+                model_kwargs=model_config,
+                show_progress=True,
+            )
+            print(
+                "[{index}:{name}] saved {output_path} "
+                "(steps={steps}, loss={loss:.4f}, policy={policy:.4f}, value={value:.4f})".format(
+                    index=stage.index,
+                    name=stage.name,
+                    output_path=output_path,
+                    steps=metadata["steps"],
+                    loss=metadata["last_loss"],
+                    policy=metadata["last_policy_loss"],
+                    value=metadata["last_value_loss"],
+                ),
+                flush=True,
+            )
+
+        arena_record: dict | None = None
+        if arena_promotion:
+            if checkpoint is None:
+                raise RuntimeError("Continuation arena evaluation requires an incumbent checkpoint.")
+            print(f"[{stage.index}:{stage.name}] arena", flush=True)
+            arena_result = run_checkpoint_arena(
+                candidate_checkpoint=output_path,
+                incumbent_checkpoint=checkpoint,
+                device=device,
+                config=ArenaConfig(
+                    board_size=args.board_size,
+                    games=args.arena_games,
+                    num_simulations=(
+                        args.arena_simulations
+                        if args.arena_simulations is not None
+                        else stage.simulations
+                    ),
+                    c_puct=args.arena_c_puct,
+                    seed=args.arena_seed_base + stage.index,
+                ),
+                model_kwargs=model_config,
+            )
+            accepted = should_promote(
+                arena_result,
+                minimum_score=args.arena_minimum_score,
+            )
+            update_checkpoint_metadata(
+                output_path,
+                arena_result,
+                incumbent_checkpoint=checkpoint,
+                minimum_score=args.arena_minimum_score,
+                promoted=accepted,
+            )
+            promoted = promote_if_stronger(
+                candidate_checkpoint=output_path,
+                incumbent_checkpoint=checkpoint,
+                result=arena_result,
+                minimum_score=args.arena_minimum_score,
+            )
+            arena_result_path = output_path.with_suffix(output_path.suffix + ".arena.json")
+            save_arena_result(
+                arena_result,
+                arena_result_path,
+                candidate_checkpoint=output_path,
+                incumbent_checkpoint=checkpoint,
+                minimum_score=args.arena_minimum_score,
+                promoted=promoted,
+            )
+            arena_record = {
+                **arena_result.to_dict(),
+                "result_path": str(arena_result_path),
+                "minimum_score": args.arena_minimum_score,
+                "promoted": promoted,
+            }
+            print(
+                "[{index}:{name}] arena candidate {wins}-{losses}-{draws} "
+                "(score={score:.3f}; promoted={promoted})".format(
+                    index=stage.index,
+                    name=stage.name,
+                    wins=arena_result.candidate_wins,
+                    losses=arena_result.incumbent_wins,
+                    draws=arena_result.draws,
+                    score=arena_result.candidate_score,
+                    promoted=promoted,
+                ),
+                flush=True,
+            )
+            previous_checkpoint = checkpoint
+        else:
+            previous_checkpoint = str(output_path)
+
+        records.append(
+            stage_record(
+                stage,
+                dataset_path,
+                output_path,
+                checkpoint,
+                skipped=skipped,
+                metadata=metadata,
+                arena=arena_record,
+            )
         )
 
-        records.append(stage_record(stage, dataset_path, output_path, checkpoint, skipped=False, metadata=metadata))
-        previous_checkpoint = str(output_path)
-
-    write_manifest(manifest_path, records)
+    write_manifest(manifest_path, records, schedule=args.schedule)
     print(f"\nWrote manifest to {manifest_path}", flush=True)
 
-    if args.promote_latest and previous_checkpoint is not None:
-        latest_path = Path(args.latest_path)
+    if args.promote_latest and previous_checkpoint is not None and not arena_promotion:
         latest_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(previous_checkpoint, latest_path)
         metadata_source = Path(previous_checkpoint).with_suffix(Path(previous_checkpoint).suffix + ".json")
@@ -225,9 +395,59 @@ def main() -> int:
     return 0
 
 
-def select_stages(*, include_smoke: bool, start_stage: int, end_stage: int) -> list[StageSpec]:
-    stages = ((SMOKE_STAGE,) if include_smoke else ()) + DEFAULT_STAGES
-    return [stage for stage in stages if start_stage <= stage.index <= end_stage]
+def stage_bounds_for_schedule(
+    schedule: str,
+    *,
+    start_stage: int | None,
+    end_stage: int | None,
+) -> tuple[int, int]:
+    if schedule == "full":
+        return start_stage if start_stage is not None else 1, end_stage if end_stage is not None else 5
+    if schedule == "continue":
+        resolved_start = start_stage if start_stage is not None else 1
+        return resolved_start, end_stage if end_stage is not None else resolved_start
+    raise ValueError(f"Unsupported schedule: {schedule}")
+
+
+def validate_continuation_options(args: argparse.Namespace) -> None:
+    if args.schedule != "continue":
+        return
+    if args.arena_games < 2 or args.arena_games % 2 != 0:
+        raise SystemExit("--arena-games must be an even number of at least 2.")
+    if args.arena_simulations is not None and args.arena_simulations < 1:
+        raise SystemExit("--arena-simulations must be at least 1.")
+    if args.arena_c_puct <= 0:
+        raise SystemExit("--arena-c-puct must be positive.")
+    if not 0.0 <= args.arena_minimum_score <= 1.0:
+        raise SystemExit("--arena-minimum-score must be between 0 and 1.")
+
+
+def select_stages(
+    *,
+    include_smoke: bool,
+    start_stage: int,
+    end_stage: int,
+    schedule: str = "full",
+) -> list[StageSpec]:
+    if schedule == "full":
+        stages = ((SMOKE_STAGE,) if include_smoke else ()) + DEFAULT_STAGES
+        return [stage for stage in stages if start_stage <= stage.index <= end_stage]
+    if schedule == "continue":
+        if include_smoke:
+            raise ValueError("The continuation schedule cannot include the bootstrap smoke stage.")
+        return [
+            StageSpec(
+                index=round_index,
+                name=CONTINUATION_STAGE.name,
+                games=CONTINUATION_STAGE.games,
+                simulations=CONTINUATION_STAGE.simulations,
+                epochs=CONTINUATION_STAGE.epochs,
+                batch_size=CONTINUATION_STAGE.batch_size,
+                lr=CONTINUATION_STAGE.lr,
+            )
+            for round_index in range(start_stage, end_stage + 1)
+        ]
+    raise ValueError(f"Unsupported schedule: {schedule}")
 
 
 def stage_paths(
@@ -294,6 +514,7 @@ def stage_record(
     *,
     skipped: bool,
     metadata: dict | None = None,
+    arena: dict | None = None,
 ) -> dict:
     record = {
         "stage": asdict(stage),
@@ -304,12 +525,17 @@ def stage_record(
     }
     if metadata is not None:
         record["training"] = metadata
+    if arena is not None:
+        record["arena"] = arena
     return record
 
 
-def write_manifest(path: Path, records: list[dict]) -> None:
+def write_manifest(path: Path, records: list[dict], *, schedule: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"stages": records}, indent=2), encoding="utf-8")
+    path.write_text(
+        json.dumps({"schedule": schedule, "stages": records}, indent=2),
+        encoding="utf-8",
+    )
 
 
 if __name__ == "__main__":

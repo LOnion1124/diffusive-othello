@@ -227,6 +227,13 @@ Acceptance criteria:
 
 Goal: make model improvement measurable.
 
+Status: partially implemented. Training checkpoints include dataset and
+optimizer metadata, and `src/train/arena.py` now runs balanced checkpoint
+arenas. The `continue` multi-stage schedule repeats stage-5 strength from
+`models/latest.pth` by default and promotes a candidate only when its arena
+score strictly exceeds the configured threshold. Baseline win-rate tracking
+against random and heuristic players remains future work.
+
 Tasks:
 
 - Add a proper training script, for example `python -m src.train.train`.

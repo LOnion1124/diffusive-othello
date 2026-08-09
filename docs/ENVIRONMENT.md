@@ -85,8 +85,10 @@ Required dependencies:
 Expected behavior:
 
 - Training should run through command-line scripts, not notebooks only.
-- The root training entry point is `.\train.ps1`, which starts the multi-stage
-  trainer in the background and writes logs under `logs/`.
+- Root training entry points are `.\train.ps1` on Windows and `bash ./train.sh`
+  on Linux. Both start the multi-stage trainer in the background and write logs
+  under `logs/`; the Linux script prefers `venv/bin/python` and falls back to
+  `python3`.
 - Python training implementation scripts live under `src/train`; keep the root
   launcher as the documented training entry point.
 - All training dependencies should be documented and installable.
@@ -97,6 +99,14 @@ Expected behavior:
 - Self-play can shard games across processes with `--self-play-workers`, which
   is most useful for CPU generation. On a single GPU, prefer one worker and a
   larger self-play batch to avoid loading one model per process.
+- `python -m src.train.train_multistage --schedule continue` is the guarded
+  long-running training path for an existing model. It starts from
+  `models/latest.pth` by default, repeats the stage-5 workload, and promotes a
+  candidate only after it scores strictly above 50% in a color-balanced,
+  deterministic MCTS arena against the current incumbent.
+- `python -m src.train.arena --candidate <path> --incumbent <path> --promote`
+  runs the same checkpoint comparison independently. Arena game counts must be
+  even; its result is saved next to the candidate as `<candidate>.arena.json`.
 
 ### Web Game
 
@@ -128,6 +138,10 @@ Current behavior:
 - `ai.runtime.model_path` controls the pygame checkpoint path used by the
   desktop win-rate bar and PVE AI moves.
 - `ai.self_play` and `ai.train` define generated data and checkpoint defaults.
+- The continuation schedule uses `ai.runtime.model_path` as its default
+  incumbent and promotion target. The stage-5-equivalent settings are defined
+  as `CONTINUATION_STAGE` in `src/train/train_multistage.py`; CLI arena options
+  override only evaluation settings, not the saved model architecture.
 
 ## Dataset Format Notes
 
@@ -165,3 +179,5 @@ Recommended improvement:
 - Keep large generated datasets out of normal commits.
 - Save model checkpoints with metadata.
 - Document how to regenerate datasets and checkpoints.
+- Keep rejected continuation candidates and their arena JSON records for later
+  analysis; only the configured incumbent path is replaced after a win.

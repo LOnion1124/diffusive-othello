@@ -2,9 +2,14 @@ param(
     [string]$Device = "cuda",
     [int]$SelfPlayBatchSize = 8,
     [int]$SelfPlayWorkers = 1,
-    [int]$StartStage = 1,
-    [int]$EndStage = 5,
+    [ValidateSet("full", "continue")]
+    [string]$Schedule = "full",
+    [int]$StartStage = -1,
+    [int]$EndStage = -1,
     [string]$InitialCheckpoint = "",
+    [int]$ArenaGames = 40,
+    [int]$ArenaSimulations = 0,
+    [double]$ArenaMinimumScore = 0.5,
     [string]$OutLog = "logs\train_multistage.out",
     [string]$ErrLog = "logs\train_multistage.err",
     [switch]$IncludeSmoke,
@@ -41,14 +46,25 @@ try {
         [string]$SelfPlayBatchSize,
         "--self-play-workers",
         [string]$SelfPlayWorkers,
-        "--start-stage",
-        [string]$StartStage,
-        "--end-stage",
-        [string]$EndStage
+        "--schedule",
+        $Schedule
     )
 
+    if ($StartStage -ge 0) {
+        $arguments += @("--start-stage", [string]$StartStage)
+    }
+    if ($EndStage -ge 0) {
+        $arguments += @("--end-stage", [string]$EndStage)
+    }
     if ($InitialCheckpoint) {
         $arguments += @("--initial-checkpoint", $InitialCheckpoint)
+    }
+    if ($Schedule -eq "continue") {
+        $arguments += @("--arena-games", [string]$ArenaGames)
+        if ($ArenaSimulations -gt 0) {
+            $arguments += @("--arena-simulations", [string]$ArenaSimulations)
+        }
+        $arguments += @("--arena-minimum-score", [string]$ArenaMinimumScore)
     }
     if ($IncludeSmoke) {
         $arguments += "--include-smoke"
@@ -59,7 +75,7 @@ try {
     if (-not $NoResume -and -not $Overwrite) {
         $arguments += "--resume"
     }
-    if (-not $NoPromoteLatest) {
+    if ($Schedule -ne "continue" -and -not $NoPromoteLatest) {
         $arguments += "--promote-latest"
     }
 

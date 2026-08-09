@@ -127,6 +127,13 @@ the background. It writes logs under `logs/` and runs the package module from
 .\train.ps1
 ```
 
+On Linux, use the equivalent Bash entry point. It automatically prefers
+`venv/bin/python`, falling back to `python3`, and also runs in the background:
+
+```sh
+bash ./train.sh
+```
+
 The default launcher uses CUDA, batched self-play, `--resume`, and
 `--promote-latest`. Common overrides:
 
@@ -135,6 +142,62 @@ The default launcher uses CUDA, batched self-play, `--resume`, and
 .\train.ps1 -Device cuda -SelfPlayBatchSize 16
 .\train.ps1 -StartStage 3 -InitialCheckpoint models\stage2_iter01.pth
 ```
+
+Linux accepts equivalent kebab-case options:
+
+```sh
+bash ./train.sh --device cuda --self-play-batch-size 16
+bash ./train.sh --start-stage 3 --initial-checkpoint models/stage2_iter01.pth
+```
+
+### Continue from a strong checkpoint
+
+Use the continuation schedule to repeat the stage-5 workload (2,000 self-play
+games, 256 MCTS simulations, and five training epochs) from an existing strong
+model. Its default baseline and promotion target are `models/latest.pth`:
+
+```powershell
+.\train.ps1 -Schedule continue
+```
+
+```sh
+bash ./train.sh --schedule continue
+```
+
+Each round writes an independent candidate such as
+`data/continue1_stage5.pt` and `models/continue1_stage5.pth`. Before replacing
+the incumbent, it runs an arena with an equal number of first-player and
+second-player games, deterministic MCTS move selection, and no root noise. A
+candidate replaces the incumbent only when its match score is strictly above
+50% (`win + 0.5 * draw`); ties keep the existing checkpoint. Run several
+sequential continuation rounds in one background job with:
+
+```powershell
+.\train.ps1 -Schedule continue -EndStage 3
+```
+
+```sh
+bash ./train.sh --schedule continue --end-stage 3
+```
+
+The continuation schedule keeps the current incumbent after a rejected round,
+so the next round never trains from a rejected candidate. `-ArenaGames`,
+`-ArenaSimulations`, and `-ArenaMinimumScore` expose the corresponding arena
+thresholds. Arena game counts must be even so that each checkpoint receives
+the same number of games as each color.
+
+You can also compare and optionally promote checkpoints independently:
+
+```sh
+python -m src.train.arena --candidate models/continue1_stage5.pth --incumbent models/latest.pth --games 40 --simulations 256 --device cuda --promote
+```
+
+The command writes a full per-game record to
+`models/continue1_stage5.pth.arena.json`. Promotion atomically replaces the
+incumbent checkpoint and its `.pth.json` metadata sidecar only after the
+candidate clears `--minimum-score` (default `0.5`). Checkpoints must use the
+model architecture supplied by `config.yaml` or matching command-line model
+overrides.
 
 Watch the background logs:
 
@@ -149,6 +212,17 @@ Stop a background run by PID, using the value printed by `train.ps1`:
 Stop-Process -Id <PID>
 ```
 
+On Linux, follow the logs and stop a process with:
+
+```sh
+tail -n 50 -f logs/train_multistage.out
+tail -n 50 -f logs/train_multistage.err
+kill <PID>
+```
+
+Pass `--foreground` to `train.sh` to keep the trainer attached to the current
+terminal instead of starting it with `nohup`.
+
 The default multi-stage schedule writes independent datasets and checkpoints:
 
 - `data/stage1_bootstrap.pt` -> `models/stage1_bootstrap.pth`
@@ -157,6 +231,12 @@ The default multi-stage schedule writes independent datasets and checkpoints:
 - `data/stage4_iter03.pt` -> `models/stage4_iter03.pth`
 - `data/stage5_final.pt` -> `models/stage5_final.pth`
 
+Continuation rounds use separate artifacts and do not overwrite the curriculum
+stage files:
+
+- `data/continue1_stage5.pt` -> `models/continue1_stage5.pth`
+- `data/continue2_stage5.pt` -> `models/continue2_stage5.pth`
+
 The implementation scripts live under `src/train/train_multistage.py` and
-`src/train/train_pipeline.py`; keep `train.ps1` as the root training entry
-point.
+`src/train/train_pipeline.py`; keep `train.ps1` (Windows) and `train.sh`
+(Linux) as the root training entry points.

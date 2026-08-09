@@ -5,8 +5,10 @@ import pytest
 pytest.importorskip("torch")
 
 from src.train.train_multistage import (
+    CONTINUATION_STAGE,
     DEFAULT_STAGES,
     select_stages,
+    stage_bounds_for_schedule,
     resolve_initial_checkpoint,
     stage_paths,
 )
@@ -43,3 +45,25 @@ def test_resolve_initial_checkpoint_infers_previous_stage(tmp_path):
     )
 
     assert checkpoint == str(previous)
+
+
+def test_continuation_schedule_repeats_stage_five_workload_by_round():
+    start_stage, end_stage = stage_bounds_for_schedule(
+        "continue",
+        start_stage=None,
+        end_stage=2,
+    )
+    selected = select_stages(
+        include_smoke=False,
+        start_stage=start_stage,
+        end_stage=end_stage,
+        schedule="continue",
+    )
+
+    assert [stage.index for stage in selected] == [1, 2]
+    assert all(stage.name == "stage5" for stage in selected)
+    assert all(stage.games == CONTINUATION_STAGE.games for stage in selected)
+    assert all(stage.simulations == CONTINUATION_STAGE.simulations for stage in selected)
+    assert all(stage.epochs == CONTINUATION_STAGE.epochs for stage in selected)
+
+    assert stage_bounds_for_schedule("continue", start_stage=3, end_stage=None) == (3, 3)
