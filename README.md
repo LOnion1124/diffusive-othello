@@ -181,10 +181,13 @@ bash ./train.sh --schedule continue --end-stage 3
 ```
 
 The continuation schedule keeps the current incumbent after a rejected round,
-so the next round never trains from a rejected candidate. `-ArenaGames`,
-`-ArenaSimulations`, and `-ArenaMinimumScore` expose the corresponding arena
-thresholds. Arena game counts must be even so that each checkpoint receives
-the same number of games as each color.
+and stops the job before generating any later rounds. After a successful arena,
+the candidate is promoted to `models/latest.pth`; the next stage uses that
+accepted product model as both its self-play and training checkpoint. The
+arena always compares a candidate with the checkpoint that started its current
+stage. `-ArenaGames`, `-ArenaSimulations`, and `-ArenaMinimumScore` expose the
+corresponding arena thresholds. Arena game counts must be even so that each
+checkpoint receives the same number of games as each color.
 
 You can also compare and optionally promote checkpoints independently:
 

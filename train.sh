@@ -17,7 +17,7 @@ Options:
   --schedule {full,continue}      Training schedule (default: full)
   --start-stage N                 First curriculum stage or continuation round
   --end-stage N                   Last curriculum stage or continuation round
-  --initial-checkpoint PATH       Explicit initial/incumbent checkpoint
+  --initial-checkpoint PATH       First continuation-stage checkpoint; later stages use product model
   --arena-games N                 Even arena game count for continue (default: 40)
   --arena-simulations N           Arena MCTS simulations per move
   --arena-minimum-score SCORE     Strict promotion threshold (default: 0.5)
@@ -159,6 +159,10 @@ if [[ $resume -eq 1 && $overwrite -eq 0 ]]; then
 fi
 if [[ "$schedule" != "continue" && $promote_latest -eq 1 ]]; then
     arguments+=(--promote-latest)
+fi
+
+if [[ "$schedule" == "continue" ]]; then
+    printf 'Continuation stages use the accepted product checkpoint; an arena rejection stops this run.\n'
 fi
 
 if [[ $foreground -eq 1 ]]; then

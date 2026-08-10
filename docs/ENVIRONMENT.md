@@ -103,7 +103,9 @@ Expected behavior:
   long-running training path for an existing model. It starts from
   `models/latest.pth` by default, repeats the stage-5 workload, and promotes a
   candidate only after it scores strictly above 50% in a color-balanced,
-  deterministic MCTS arena against the current incumbent.
+  deterministic MCTS arena against the checkpoint that started that stage.
+  Each successful candidate becomes the product model used by the next stage;
+  a rejected candidate ends the continuation job early.
 - `python -m src.train.arena --candidate <path> --incumbent <path> --promote`
   runs the same checkpoint comparison independently. Arena game counts must be
   even; its result is saved next to the candidate as `<candidate>.arena.json`.
@@ -141,7 +143,9 @@ Current behavior:
 - The continuation schedule uses `ai.runtime.model_path` as its default
   incumbent and promotion target. The stage-5-equivalent settings are defined
   as `CONTINUATION_STAGE` in `src/train/train_multistage.py`; CLI arena options
-  override only evaluation settings, not the saved model architecture.
+  override only evaluation settings, not the saved model architecture. An
+  explicit `--initial-checkpoint` seeds only the first continuation stage;
+  later stages load the latest accepted product checkpoint.
 
 ## Dataset Format Notes
 

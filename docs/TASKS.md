@@ -231,8 +231,10 @@ Status: partially implemented. Training checkpoints include dataset and
 optimizer metadata, and `src/train/arena.py` now runs balanced checkpoint
 arenas. The `continue` multi-stage schedule repeats stage-5 strength from
 `models/latest.pth` by default and promotes a candidate only when its arena
-score strictly exceeds the configured threshold. Baseline win-rate tracking
-against random and heuristic players remains future work.
+score strictly exceeds the configured threshold. Each accepted candidate is
+the next stage's product checkpoint; a failed arena stops the run before later
+stages train. Baseline win-rate tracking against random and heuristic players
+remains future work.
 
 Tasks:
 

@@ -78,6 +78,9 @@ try {
     if ($Schedule -ne "continue" -and -not $NoPromoteLatest) {
         $arguments += "--promote-latest"
     }
+    if ($Schedule -eq "continue") {
+        Write-Host "Continuation stages use the accepted product checkpoint; an arena rejection stops this run."
+    }
 
     $process = Start-Process `
         -FilePath $python `
