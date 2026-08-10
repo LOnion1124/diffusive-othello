@@ -185,8 +185,9 @@ def main() -> int:
     )
     if arena_promotion:
         print(
-            "Continuation schedule: each candidate is evaluated against the current "
-            f"baseline and promoted only after an arena win (default: {latest_path}).",
+            "Continuation schedule: each stage starts from the current product model; "
+            "arena compares the candidate with that stage start. "
+            f"Winning candidates are promoted to {latest_path}; a failed arena stops training.",
             flush=True,
         )
         if args.promote_latest:
@@ -209,6 +210,8 @@ def main() -> int:
             prefix=prefix,
         )
     records: list[dict] = []
+    stopped_early = False
+    stop_reason: str | None = None
 
     for stage in selected_stages:
         dataset_path, output_path = stage_paths(
@@ -299,6 +302,7 @@ def main() -> int:
             )
 
         arena_record: dict | None = None
+        stop_after_stage = False
         if arena_promotion:
             if checkpoint is None:
                 raise RuntimeError("Continuation arena evaluation requires an incumbent checkpoint.")
@@ -333,7 +337,7 @@ def main() -> int:
             )
             promoted = promote_if_stronger(
                 candidate_checkpoint=output_path,
-                incumbent_checkpoint=checkpoint,
+                incumbent_checkpoint=latest_path,
                 result=arena_result,
                 minimum_score=args.arena_minimum_score,
             )
@@ -349,6 +353,8 @@ def main() -> int:
             arena_record = {
                 **arena_result.to_dict(),
                 "result_path": str(arena_result_path),
+                "stage_start_checkpoint": checkpoint,
+                "product_checkpoint": str(latest_path) if promoted else checkpoint,
                 "minimum_score": args.arena_minimum_score,
                 "promoted": promoted,
             }
@@ -365,7 +371,17 @@ def main() -> int:
                 ),
                 flush=True,
             )
-            previous_checkpoint = checkpoint
+            previous_checkpoint, stop_after_stage = continuation_next_checkpoint(
+                stage_start_checkpoint=checkpoint,
+                product_checkpoint=latest_path,
+                promoted=promoted,
+            )
+            if stop_after_stage:
+                stopped_early = True
+                stop_reason = (
+                    f"Stage {stage.index}:{stage.name} candidate did not clear the arena "
+                    f"promotion threshold of {args.arena_minimum_score:.3f}."
+                )
         else:
             previous_checkpoint = str(output_path)
 
@@ -380,8 +396,17 @@ def main() -> int:
                 arena=arena_record,
             )
         )
+        if stop_after_stage:
+            print(f"Stopping continuation training early: {stop_reason}", flush=True)
+            break
 
-    write_manifest(manifest_path, records, schedule=args.schedule)
+    write_manifest(
+        manifest_path,
+        records,
+        schedule=args.schedule,
+        stopped_early=stopped_early,
+        stop_reason=stop_reason,
+    )
     print(f"\nWrote manifest to {manifest_path}", flush=True)
 
     if args.promote_latest and previous_checkpoint is not None and not arena_promotion:
@@ -420,6 +445,19 @@ def validate_continuation_options(args: argparse.Namespace) -> None:
         raise SystemExit("--arena-c-puct must be positive.")
     if not 0.0 <= args.arena_minimum_score <= 1.0:
         raise SystemExit("--arena-minimum-score must be between 0 and 1.")
+
+
+def continuation_next_checkpoint(
+    *,
+    stage_start_checkpoint: str,
+    product_checkpoint: Path,
+    promoted: bool,
+) -> tuple[str, bool]:
+    """Return the next product checkpoint and whether continuation must stop."""
+
+    if promoted:
+        return str(product_checkpoint), False
+    return stage_start_checkpoint, True
 
 
 def select_stages(
@@ -530,10 +568,24 @@ def stage_record(
     return record
 
 
-def write_manifest(path: Path, records: list[dict], *, schedule: str) -> None:
+def write_manifest(
+    path: Path,
+    records: list[dict],
+    *,
+    schedule: str,
+    stopped_early: bool = False,
+    stop_reason: str | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "schedule": schedule,
+        "stages": records,
+        "stopped_early": stopped_early,
+    }
+    if stop_reason is not None:
+        manifest["stop_reason"] = stop_reason
     path.write_text(
-        json.dumps({"schedule": schedule, "stages": records}, indent=2),
+        json.dumps(manifest, indent=2),
         encoding="utf-8",
     )
 
