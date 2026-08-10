@@ -24,6 +24,7 @@ from src.game.state import (
 
 
 PHASE_START = "start"
+PHASE_LOADING = "loading"
 PHASE_GAME = "game"
 PHASE_END = "end"
 
@@ -99,6 +100,10 @@ class LazyAiPolicy:
             raise RuntimeError(f"AI returned illegal move {move} for player {player}.")
         return move
 
+    def preload(self) -> None:
+        """Load the optional model before the first rendered game frame."""
+        self._load_ai()
+
     def _predict(self, state: GameState, player: int) -> dict:
         ai = self._load_ai()
         return ai.inference(
@@ -158,6 +163,7 @@ class GameController:
         self.first_player_win_rate: float | None = None
         self.win_rate_invalid = False
         self._win_rate_error_reported = False
+        self._pending_mode: str | None = None
 
     @property
     def current_player(self) -> int:
@@ -195,6 +201,7 @@ class GameController:
     def start_game(self, mode: str | None = None) -> None:
         if mode is not None:
             self.mode = self._normalize_mode(mode)
+        self._pending_mode = None
         self.state = new_game(self.board_size)
         if self.mode == MODE_PVE:
             self.human_player = random.choice(PLAYERS)
@@ -212,9 +219,31 @@ class GameController:
         self._settle_turn()
         self._refresh_first_player_win_rate()
 
+    def begin_loading(self, mode: str | None = None) -> None:
+        """Enter the pre-game loading state without blocking the UI loop."""
+        if mode is not None:
+            self.mode = self._normalize_mode(mode)
+        self._pending_mode = self.mode
+        self.phase = PHASE_LOADING
+        self.state = None
+        self.winner = EMPTY
+        self.winner_name = ""
+        self.info = "Loading game model..."
+        self.first_player_win_rate = None
+        self.win_rate_invalid = False
+        self._win_rate_error_reported = False
+
+    def finish_loading(self) -> bool:
+        """Start the selected match after background preloading has finished."""
+        if self.phase != PHASE_LOADING:
+            return False
+        self.start_game(self._pending_mode)
+        return True
+
     def return_to_start(self) -> None:
         self.phase = PHASE_START
         self.state = None
+        self._pending_mode = None
         self.winner = EMPTY
         self.winner_name = ""
         self.info = "Diffusive Othello"
@@ -235,7 +264,7 @@ class GameController:
         if self.phase == PHASE_START:
             if start_mode is None:
                 return False
-            self.start_game(start_mode)
+            self.begin_loading(start_mode)
             return True
 
         if self.phase == PHASE_END:

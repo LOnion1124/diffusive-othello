@@ -8,6 +8,7 @@ from src.ui.game_controller import (
     MODE_PVP,
     PHASE_END,
     PHASE_GAME,
+    PHASE_LOADING,
     PHASE_START,
 )
 from src.ui.pygame_renderer import PygameRenderer
@@ -145,8 +146,26 @@ def test_start_click_requires_mode_selection():
     assert controller.phase == PHASE_START
 
     assert controller.handle_click(True, start_mode=MODE_PVE)
+    assert controller.phase == PHASE_LOADING
+    assert controller.mode == MODE_PVE
+    assert controller.finish_loading()
     assert controller.phase == PHASE_GAME
     assert controller.mode == MODE_PVE
+
+
+def test_finish_loading_only_starts_a_pending_game():
+    controller = GameController(
+        mode=MODE_PVP,
+        board_size=4,
+        ai_policy=FailingPolicy(),
+        error_sink=None,
+    )
+
+    assert not controller.finish_loading()
+    controller.begin_loading(MODE_PVP)
+    assert controller.snapshot().legal_place_moves == ()
+    assert controller.finish_loading()
+    assert controller.phase == PHASE_GAME
 
 
 def test_end_click_returns_to_start_screen():
@@ -266,8 +285,7 @@ def test_renderer_only_shows_win_rate_bar_during_gameplay():
 
 def test_renderer_maps_start_buttons_to_modes():
     renderer = object.__new__(PygameRenderer)
-    renderer.board_left_top = (0, 80)
-    renderer.board_length = 240
+    renderer.content_rect = (24, 112, 484, 240)
 
     pvp_rect = renderer._start_button_rects()[MODE_PVP]
     pve_rect = renderer._start_button_rects()[MODE_PVE]
@@ -277,10 +295,62 @@ def test_renderer_maps_start_buttons_to_modes():
     assert renderer.start_mode_at((0, 0)) is None
 
 
+def test_renderer_uses_board_plus_sidebar_layout():
+    assert PygameRenderer.screen_size(9, show_winrate_bar=False) == (832, 676)
+    assert PygameRenderer.screen_size(9, show_winrate_bar=True) == (832, 676)
+
+
 def test_renderer_formats_win_rate_label_as_score_pair():
     assert PygameRenderer._format_winrate_label(0.73) == "73 : 27"
     assert PygameRenderer._format_winrate_label(None) == "50 : 50"
     assert PygameRenderer._format_winrate_label(0.5, invalid=True) == "Invalid"
+
+
+def test_renderer_tracks_piece_flips_between_snapshots():
+    before = state_from_board(
+        [
+            [PLAYER_ONE, 0, 0, 0],
+            [0, PLAYER_TWO, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+        ]
+    )
+    after = state_from_board(
+        [
+            [PLAYER_ONE, 0, 0, 0],
+            [0, PLAYER_ONE, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+        ]
+    )
+    renderer = object.__new__(PygameRenderer)
+    renderer.board_size = 4
+    renderer._previous_board = tuple(tuple(column) for column in before.board)
+    renderer._piece_entered_at = {}
+    renderer._piece_flip_at = {}
+    snapshot = GameSnapshot(
+        phase=PHASE_GAME,
+        board_size=4,
+        state=after,
+        current_player=PLAYER_ONE,
+        scores={0: 14, PLAYER_ONE: 2, PLAYER_TWO: 0},
+        winner=0,
+        winner_name="",
+        info="Player1's turn.",
+        mode=MODE_PVP,
+    )
+
+    renderer._update_piece_animations(snapshot, now_ms=100)
+
+    assert renderer._piece_flip_at[(1, 1)] == (PLAYER_TWO, 100)
+    assert renderer._flip_visual_state((1, 1), PLAYER_ONE, 100) == (PLAYER_TWO, 1.0)
+    player, width = renderer._flip_visual_state(
+        (1, 1),
+        PLAYER_ONE,
+        100 + PygameRenderer.PIECE_FLIP_ANIMATION_MS // 2,
+    )
+    assert player == PLAYER_ONE
+    assert width == pytest.approx(0.12)
 
 
 def test_pve_controller_can_assign_ai_as_first_player(monkeypatch):
