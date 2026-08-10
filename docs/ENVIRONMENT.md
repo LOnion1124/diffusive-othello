@@ -103,7 +103,9 @@ Expected behavior:
   long-running training path for an existing model. It starts from
   `models/latest.pth` by default, repeats the stage-5 workload, and promotes a
   candidate only after it scores strictly above 50% in a color-balanced,
-  deterministic MCTS arena against the checkpoint that started that stage.
+  seeded-random MCTS arena against the checkpoint that started that stage.
+  Final moves are sampled from MCTS visit distributions by default; set the
+  arena temperature to zero for deterministic best-visit evaluation.
   Each successful candidate becomes the product model used by the next stage;
   a rejected candidate ends the continuation job early.
 - `python -m src.train.arena --candidate <path> --incumbent <path> --promote`
@@ -140,6 +142,10 @@ Current behavior:
 - `ai.runtime.model_path` controls the pygame checkpoint path used by the
   desktop win-rate bar and PVE AI moves.
 - `ai.self_play` and `ai.train` define generated data and checkpoint defaults.
+- `ai.arena` defines default game count, MCTS visit-sampling temperature,
+  reproducibility seeds, and promotion threshold. Arena games must be even;
+  the candidate receives exactly half as first player and half as second
+  player, in a seed-shuffled order.
 - The continuation schedule uses `ai.runtime.model_path` as its default
   incumbent and promotion target. The stage-5-equivalent settings are defined
   as `CONTINUATION_STAGE` in `src/train/train_multistage.py`; CLI arena options

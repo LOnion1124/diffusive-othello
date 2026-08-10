@@ -167,10 +167,13 @@ bash ./train.sh --schedule continue
 Each round writes an independent candidate such as
 `data/continue1_stage5.pt` and `models/continue1_stage5.pth`. Before replacing
 the incumbent, it runs an arena with an equal number of first-player and
-second-player games, deterministic MCTS move selection, and no root noise. A
-candidate replaces the incumbent only when its match score is strictly above
-50% (`win + 0.5 * draw`); ties keep the existing checkpoint. Run several
-sequential continuation rounds in one background job with:
+second-player games. With its default positive temperature, each final move is
+sampled from the MCTS visit distribution; root noise remains disabled. Arena
+games are therefore randomized but reproducible for a given seed. Set the
+arena temperature to `0` to use deterministic best-visit moves. A candidate
+replaces the incumbent only when its match score is strictly above 50% (`win +
+0.5 * draw`); ties keep the existing checkpoint. Run several sequential
+continuation rounds in one background job with:
 
 ```powershell
 .\train.ps1 -Schedule continue -EndStage 3
@@ -185,17 +188,19 @@ and stops the job before generating any later rounds. After a successful arena,
 the candidate is promoted to `models/latest.pth`; the next stage uses that
 accepted product model as both its self-play and training checkpoint. The
 arena always compares a candidate with the checkpoint that started its current
-stage. `-ArenaGames`, `-ArenaSimulations`, and `-ArenaMinimumScore` expose the
-corresponding arena thresholds. Arena game counts must be even so that each
-checkpoint receives the same number of games as each color.
+stage. `-ArenaGames`, `-ArenaSimulations`, `-ArenaTemperature`, and
+`-ArenaMinimumScore` expose the corresponding arena settings. Arena game
+counts must be even so that each checkpoint receives the same number of games
+as each color. Defaults live under `ai.arena` in `config.yaml`.
 
 You can also compare and optionally promote checkpoints independently:
 
 ```sh
-python -m src.train.arena --candidate models/continue1_stage5.pth --incumbent models/latest.pth --games 40 --simulations 256 --device cuda --promote
+python -m src.train.arena --candidate models/continue1_stage5.pth --incumbent models/latest.pth --games 40 --simulations 256 --move-temperature 1.0 --seed 0 --device cuda --promote
 ```
 
-The command writes a full per-game record to
+The command writes a full per-game record, including per-game random seeds and
+candidate first-player/second-player summaries, to
 `models/continue1_stage5.pth.arena.json`. Promotion atomically replaces the
 incumbent checkpoint and its `.pth.json` metadata sidecar only after the
 candidate clears `--minimum-score` (default `0.5`). Checkpoints must use the

@@ -25,6 +25,15 @@ ai:
     dirichlet_epsilon: 0.25
     add_root_noise: true
 
+  # Arena samples moves from MCTS visit distributions. Set move_temperature to
+  # 0 for deterministic best-visit evaluation.
+  arena:
+    games: 40
+    move_temperature: 1.0
+    seed: 0
+    seed_base: 9000
+    minimum_score: 0.5
+
   self_play:
     output_path: "data/selfplay.pt"
     games: 100

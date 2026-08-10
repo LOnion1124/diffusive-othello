@@ -7,9 +7,10 @@ param(
     [int]$StartStage = -1,
     [int]$EndStage = -1,
     [string]$InitialCheckpoint = "",
-    [int]$ArenaGames = 40,
+    [int]$ArenaGames = -1,
     [int]$ArenaSimulations = 0,
-    [double]$ArenaMinimumScore = 0.5,
+    [double]$ArenaTemperature = -1,
+    [double]$ArenaMinimumScore = -1,
     [string]$OutLog = "logs\train_multistage.out",
     [string]$ErrLog = "logs\train_multistage.err",
     [switch]$IncludeSmoke,
@@ -60,11 +61,18 @@ try {
         $arguments += @("--initial-checkpoint", $InitialCheckpoint)
     }
     if ($Schedule -eq "continue") {
-        $arguments += @("--arena-games", [string]$ArenaGames)
+        if ($ArenaGames -ge 0) {
+            $arguments += @("--arena-games", [string]$ArenaGames)
+        }
         if ($ArenaSimulations -gt 0) {
             $arguments += @("--arena-simulations", [string]$ArenaSimulations)
         }
-        $arguments += @("--arena-minimum-score", [string]$ArenaMinimumScore)
+        if ($ArenaTemperature -ge 0) {
+            $arguments += @("--arena-temperature", [string]$ArenaTemperature)
+        }
+        if ($ArenaMinimumScore -ge 0) {
+            $arguments += @("--arena-minimum-score", [string]$ArenaMinimumScore)
+        }
     }
     if ($IncludeSmoke) {
         $arguments += "--include-smoke"

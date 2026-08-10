@@ -18,9 +18,10 @@ Options:
   --start-stage N                 First curriculum stage or continuation round
   --end-stage N                   Last curriculum stage or continuation round
   --initial-checkpoint PATH       First continuation-stage checkpoint; later stages use product model
-  --arena-games N                 Even arena game count for continue (default: 40)
+  --arena-games N                 Even arena game count for continue (default: config.yaml)
   --arena-simulations N           Arena MCTS simulations per move
-  --arena-minimum-score SCORE     Strict promotion threshold (default: 0.5)
+  --arena-temperature VALUE       MCTS visit-sampling temperature (0 is deterministic)
+  --arena-minimum-score SCORE     Strict promotion threshold (default: config.yaml)
   --out-log PATH                  Standard-output log (default: logs/train_multistage.out)
   --err-log PATH                  Standard-error log (default: logs/train_multistage.err)
   --include-smoke                 Include the small smoke stage (full only)
@@ -42,9 +43,10 @@ schedule="full"
 start_stage=""
 end_stage=""
 initial_checkpoint=""
-arena_games=40
+arena_games=""
 arena_simulations=""
-arena_minimum_score=0.5
+arena_temperature=""
+arena_minimum_score=""
 out_log="logs/train_multistage.out"
 err_log="logs/train_multistage.err"
 include_smoke=0
@@ -80,6 +82,8 @@ while [[ $# -gt 0 ]]; do
             require_value "$@"; arena_games="$2"; shift 2 ;;
         --arena-simulations)
             require_value "$@"; arena_simulations="$2"; shift 2 ;;
+        --arena-temperature)
+            require_value "$@"; arena_temperature="$2"; shift 2 ;;
         --arena-minimum-score)
             require_value "$@"; arena_minimum_score="$2"; shift 2 ;;
         --out-log)
@@ -143,9 +147,17 @@ if [[ -n "$initial_checkpoint" ]]; then
     arguments+=(--initial-checkpoint "$initial_checkpoint")
 fi
 if [[ "$schedule" == "continue" ]]; then
-    arguments+=(--arena-games "$arena_games" --arena-minimum-score "$arena_minimum_score")
+    if [[ -n "$arena_games" ]]; then
+        arguments+=(--arena-games "$arena_games")
+    fi
     if [[ -n "$arena_simulations" ]]; then
         arguments+=(--arena-simulations "$arena_simulations")
+    fi
+    if [[ -n "$arena_temperature" ]]; then
+        arguments+=(--arena-temperature "$arena_temperature")
+    fi
+    if [[ -n "$arena_minimum_score" ]]; then
+        arguments+=(--arena-minimum-score "$arena_minimum_score")
     fi
 fi
 if [[ $include_smoke -eq 1 ]]; then

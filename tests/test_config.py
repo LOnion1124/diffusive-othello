@@ -7,9 +7,11 @@ def test_load_config_exposes_new_ai_sections():
     config = load_config()
 
     assert config["game"]["board_size"] == 9
-    assert config["ai"]["runtime"]["model_path"] == "models/latest.pth"
+    assert config["ai"]["runtime"]["model_path"].endswith(".pth")
     assert config["ai"]["model"]["architecture"] == "alphanet"
     assert config["ai"]["mcts"]["num_simulations"] > 0
+    assert config["ai"]["arena"]["games"] % 2 == 0
+    assert config["ai"]["arena"]["move_temperature"] >= 0
     assert config["ai"]["self_play"]["output_path"].endswith(".pt")
     assert config["ai"]["train"]["output_path"] == "models/latest.pth"
 

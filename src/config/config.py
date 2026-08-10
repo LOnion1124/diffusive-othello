@@ -37,6 +37,13 @@ DEFAULT_CFG: dict[str, Any] = {
             "dirichlet_epsilon": 0.25,
             "add_root_noise": True,
         },
+        "arena": {
+            "games": 40,
+            "move_temperature": 1.0,
+            "seed": 0,
+            "seed_base": 9000,
+            "minimum_score": 0.5,
+        },
         "self_play": {
             "output_path": "data/selfplay.pt",
             "games": 100,

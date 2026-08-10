@@ -134,6 +134,7 @@ def test_continuation_uses_product_checkpoint_and_stops_after_arena_failure(
         arena_games=2,
         arena_simulations=1,
         arena_c_puct=1.5,
+        arena_temperature=1.0,
         arena_seed_base=1,
         arena_minimum_score=0.5,
     )

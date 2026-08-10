@@ -1,15 +1,15 @@
-"""Deterministic checkpoint arena evaluation and guarded promotion.
+"""Seeded-random checkpoint arena evaluation and guarded promotion.
 
 The arena gives each checkpoint the same number of games as first and second
-player.  Moves are chosen from MCTS visit counts without self-play noise, so
-the result is suitable for deciding whether a candidate should replace an
-incumbent checkpoint.
+player. Moves are sampled from MCTS visit counts without self-play noise, so
+the result is randomized while remaining reproducible for a given seed.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import random
 import shutil
@@ -35,18 +35,25 @@ from src.game.state import (
     score,
     winner,
 )
-from src.model.mcts.mymcts import AlphaZeroMCTS, Evaluator, MCTSConfig, NeuralEvaluator
+from src.model.mcts.mymcts import (
+    AlphaZeroMCTS,
+    Evaluator,
+    MCTSConfig,
+    NeuralEvaluator,
+    choose_action_from_distribution,
+)
 from src.train.selfplay import load_model_for_self_play
 
 
 @dataclass(frozen=True)
 class ArenaConfig:
-    """Settings for a balanced, deterministic checkpoint comparison."""
+    """Settings for a balanced, seeded-random checkpoint comparison."""
 
     board_size: int = 9
     games: int = 40
     num_simulations: int = 256
     c_puct: float = 1.5
+    move_temperature: float = 1.0
     seed: int | None = 0
 
 
@@ -58,6 +65,7 @@ class ArenaGameResult:
     candidate_margin: int
     move_count: int
     pass_count: int
+    game_seed: int = 0
 
 
 @dataclass(frozen=True)
@@ -79,7 +87,30 @@ class ArenaResult:
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["candidate_score"] = self.candidate_score
+        payload["candidate_as_first"] = self.color_summary(PLAYER_ONE)
+        payload["candidate_as_second"] = self.color_summary(-PLAYER_ONE)
         return payload
+
+    def color_summary(self, candidate_player: int) -> dict[str, float | int]:
+        """Summarize candidate results for one assigned color."""
+
+        games = [game for game in self.games if game.candidate_player == candidate_player]
+        candidate_wins = sum(game.winner == candidate_player for game in games)
+        incumbent_wins = sum(game.winner == -candidate_player for game in games)
+        draws = len(games) - candidate_wins - incumbent_wins
+        margin_sum = sum(game.candidate_margin for game in games)
+        game_count = len(games)
+        return {
+            "games": game_count,
+            "candidate_wins": candidate_wins,
+            "incumbent_wins": incumbent_wins,
+            "draws": draws,
+            "candidate_score": (
+                (candidate_wins + 0.5 * draws) / game_count if game_count else 0.0
+            ),
+            "candidate_margin_sum": margin_sum,
+            "candidate_average_margin": margin_sum / game_count if game_count else 0.0,
+        }
 
 
 def run_checkpoint_arena(
@@ -121,7 +152,7 @@ def run_arena(
     incumbent_evaluator: Evaluator,
     config: ArenaConfig,
 ) -> ArenaResult:
-    """Compare two evaluators with alternating player assignments.
+    """Compare two evaluators with randomized games and balanced colors.
 
     The public evaluator-based form keeps the game loop independently testable
     and allows future non-neural baselines to use the same arena.
@@ -129,20 +160,25 @@ def run_arena(
 
     _validate_arena_config(config)
     seed_rng = random.Random(config.seed)
+    candidate_players = [PLAYER_ONE] * (config.games // 2) + [-PLAYER_ONE] * (
+        config.games // 2
+    )
+    seed_rng.shuffle(candidate_players)
     game_results: list[ArenaGameResult] = []
     candidate_wins = 0
     incumbent_wins = 0
     draws = 0
 
-    for game_index in range(config.games):
-        candidate_player = PLAYER_ONE if game_index % 2 == 0 else -PLAYER_ONE
+    for game_index, candidate_player in enumerate(candidate_players):
+        game_seed = seed_rng.randrange(2**63)
         result = _play_game(
             candidate_evaluator=candidate_evaluator,
             incumbent_evaluator=incumbent_evaluator,
             candidate_player=candidate_player,
             config=config,
-            rng=random.Random(seed_rng.randrange(2**63)),
+            rng=random.Random(game_seed),
             game_index=game_index,
+            game_seed=game_seed,
         )
         game_results.append(result)
         if result.winner == 0:
@@ -253,6 +289,7 @@ def _play_game(
     config: ArenaConfig,
     rng: random.Random,
     game_index: int,
+    game_seed: int,
 ) -> ArenaGameResult:
     state = new_game(config.board_size)
     evaluators = {
@@ -278,7 +315,12 @@ def _play_game(
             continue
 
         root = searches[player].search(state, add_root_noise=False)
-        action = _best_visit_action(root)
+        action = _select_arena_action(
+            searches[player],
+            root,
+            move_temperature=config.move_temperature,
+            rng=rng,
+        )
         state = apply_move(
             state,
             player,
@@ -295,6 +337,7 @@ def _play_game(
         candidate_margin=counts[candidate_player] - counts[-candidate_player],
         move_count=move_count,
         pass_count=pass_count,
+        game_seed=game_seed,
     )
 
 
@@ -309,6 +352,21 @@ def _best_visit_action(root: Any) -> int:
     return max(legal_children, key=lambda item: (item[1].visit_count, -item[0]))[0]
 
 
+def _select_arena_action(
+    search: AlphaZeroMCTS,
+    root: Any,
+    *,
+    move_temperature: float,
+    rng: random.Random,
+) -> int:
+    """Sample an action from MCTS visits, or choose the best action at zero temperature."""
+
+    if move_temperature == 0:
+        return _best_visit_action(root)
+    distribution = search.visit_distribution(root, temperature=move_temperature)
+    return choose_action_from_distribution(distribution, rng=rng)
+
+
 def _validate_arena_config(config: ArenaConfig) -> None:
     if config.games < 2 or config.games % 2 != 0:
         raise ValueError("Arena games must be an even number of at least 2.")
@@ -316,6 +374,8 @@ def _validate_arena_config(config: ArenaConfig) -> None:
         raise ValueError("Arena simulations must be at least 1.")
     if config.c_puct <= 0:
         raise ValueError("Arena c_puct must be positive.")
+    if not math.isfinite(config.move_temperature) or config.move_temperature < 0:
+        raise ValueError("Arena move_temperature must be finite and non-negative.")
 
 
 def _metadata_path(checkpoint: Path) -> Path:
@@ -363,19 +423,26 @@ def main() -> int:
     model_config = get_alphanet_kwargs()
     runtime_config = ai_config["runtime"]
     mcts_config = ai_config["mcts"]
+    arena_config = ai_config["arena"]
 
     parser = argparse.ArgumentParser(
-        description="Compare AlphaNet checkpoints with balanced deterministic MCTS games."
+        description="Compare AlphaNet checkpoints with balanced seeded-random MCTS games."
     )
     parser.add_argument("--candidate", required=True)
     parser.add_argument("--incumbent", default=runtime_config["model_path"])
     parser.add_argument("--device", default=runtime_config["device"])
     parser.add_argument("--board-size", type=int, default=model_config["board_size"])
-    parser.add_argument("--games", type=int, default=40)
+    parser.add_argument("--games", type=int, default=arena_config["games"])
     parser.add_argument("--simulations", type=int, default=256)
     parser.add_argument("--c-puct", type=float, default=mcts_config["c_puct"])
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--minimum-score", type=float, default=0.5)
+    parser.add_argument(
+        "--move-temperature",
+        type=float,
+        default=arena_config["move_temperature"],
+        help="Sample final moves from MCTS visits; use 0 for deterministic best-visit moves.",
+    )
+    parser.add_argument("--seed", type=int, default=arena_config["seed"])
+    parser.add_argument("--minimum-score", type=float, default=arena_config["minimum_score"])
     parser.add_argument("--result", default=None)
     parser.add_argument("--promote", action="store_true")
     add_alphanet_model_args(parser, model_config)
@@ -392,6 +459,7 @@ def main() -> int:
             games=args.games,
             num_simulations=args.simulations,
             c_puct=args.c_puct,
+            move_temperature=args.move_temperature,
             seed=args.seed,
         ),
         model_kwargs=model_config,
@@ -416,13 +484,22 @@ def main() -> int:
         minimum_score=args.minimum_score,
         promoted=promoted,
     )
+    first = result.color_summary(PLAYER_ONE)
+    second = result.color_summary(-PLAYER_ONE)
     print(
         "Arena: candidate {candidate_wins}-{incumbent_wins}-{draws} incumbent "
-        "(score={score:.3f}; promoted={promoted})".format(
+        "(score={score:.3f}; first={first_wins}-{first_losses}-{first_draws}; "
+        "second={second_wins}-{second_losses}-{second_draws}; promoted={promoted})".format(
             candidate_wins=result.candidate_wins,
             incumbent_wins=result.incumbent_wins,
             draws=result.draws,
             score=result.candidate_score,
+            first_wins=first["candidate_wins"],
+            first_losses=first["incumbent_wins"],
+            first_draws=first["draws"],
+            second_wins=second["candidate_wins"],
+            second_losses=second["incumbent_wins"],
+            second_draws=second["draws"],
             promoted=promoted,
         )
     )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -80,6 +81,7 @@ def parse_args() -> argparse.Namespace:
     train_config = ai_config["train"]
     self_play_config = ai_config["self_play"]
     mcts_config = ai_config["mcts"]
+    arena_config = ai_config["arena"]
 
     parser = argparse.ArgumentParser(
         description="Run multi-stage self-play and continued AlphaNet training."
@@ -128,7 +130,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--arena-games",
         type=int,
-        default=40,
+        default=arena_config["games"],
         help="Even number of balanced arena games for each continuation round.",
     )
     parser.add_argument(
@@ -138,11 +140,17 @@ def parse_args() -> argparse.Namespace:
         help="MCTS simulations per arena move (defaults to the continuation stage setting).",
     )
     parser.add_argument("--arena-c-puct", type=float, default=mcts_config["c_puct"])
-    parser.add_argument("--arena-seed-base", type=int, default=9000)
+    parser.add_argument(
+        "--arena-temperature",
+        type=float,
+        default=arena_config["move_temperature"],
+        help="Sample arena moves from MCTS visits; use 0 for deterministic best-visit moves.",
+    )
+    parser.add_argument("--arena-seed-base", type=int, default=arena_config["seed_base"])
     parser.add_argument(
         "--arena-minimum-score",
         type=float,
-        default=0.5,
+        default=arena_config["minimum_score"],
         help="Candidate score must strictly exceed this value to replace the incumbent.",
     )
     add_alphanet_model_args(parser, model_config)
@@ -320,6 +328,7 @@ def main() -> int:
                         else stage.simulations
                     ),
                     c_puct=args.arena_c_puct,
+                    move_temperature=args.arena_temperature,
                     seed=args.arena_seed_base + stage.index,
                 ),
                 model_kwargs=model_config,
@@ -443,6 +452,8 @@ def validate_continuation_options(args: argparse.Namespace) -> None:
         raise SystemExit("--arena-simulations must be at least 1.")
     if args.arena_c_puct <= 0:
         raise SystemExit("--arena-c-puct must be positive.")
+    if not math.isfinite(args.arena_temperature) or args.arena_temperature < 0:
+        raise SystemExit("--arena-temperature must be finite and non-negative.")
     if not 0.0 <= args.arena_minimum_score <= 1.0:
         raise SystemExit("--arena-minimum-score must be between 0 and 1.")
 
