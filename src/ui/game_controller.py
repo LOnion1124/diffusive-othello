@@ -31,6 +31,10 @@ PHASE_END = "end"
 MODE_PVP = "PVP"
 MODE_PVE = "PVE"
 
+SIDEBAR_ACTION_TOGGLE_WIN_RATE = "toggle_win_rate"
+SIDEBAR_ACTION_TOGGLE_SUGGESTIONS = "toggle_suggestions"
+SIDEBAR_ACTION_END_MATCH = "end_match"
+
 
 class MovePolicy(Protocol):
     def select_move(self, state: GameState, player: int) -> Move:
@@ -82,6 +86,9 @@ class GameSnapshot:
     win_rate_invalid: bool = False
     legal_place_moves: tuple[Move, ...] = ()
     move_suggestions: tuple[MoveSuggestion, ...] = ()
+    player_names: dict[int, str] | None = None
+    show_win_rate_prediction: bool = True
+    show_move_suggestions: bool = True
 
 
 class FirstLegalMovePolicy:
@@ -210,6 +217,8 @@ class GameController:
         self.first_player_win_rate: float | None = None
         self.win_rate_invalid = False
         self.move_suggestions: tuple[MoveSuggestion, ...] = ()
+        self.show_win_rate_prediction = True
+        self.show_move_suggestions = True
         self._win_rate_error_reported = False
         self._pending_mode: str | None = None
 
@@ -246,6 +255,9 @@ class GameController:
             win_rate_invalid=self.win_rate_invalid,
             legal_place_moves=legal_place_moves,
             move_suggestions=self.move_suggestions,
+            player_names=dict(self.player_names),
+            show_win_rate_prediction=self.show_win_rate_prediction,
+            show_move_suggestions=self.show_move_suggestions,
         )
 
     def start_game(self, mode: str | None = None) -> None:
@@ -256,9 +268,14 @@ class GameController:
         if self.mode == MODE_PVE:
             self.human_player = random.choice(PLAYERS)
             self.ai_player = -self.human_player
+            self.player_names = {
+                self.human_player: "YOU",
+                self.ai_player: "COMPUTER",
+            }
         else:
             self.human_player = PLAYER_ONE
             self.ai_player = PLAYER_TWO
+            self.player_names = {PLAYER_ONE: "Player1", PLAYER_TWO: "Player2"}
         self.phase = PHASE_GAME
         self.winner = EMPTY
         self.winner_name = ""
@@ -335,6 +352,33 @@ class GameController:
 
         return self.play_human_move(move)
 
+    def handle_sidebar_action(self, action: str | None) -> bool:
+        """Apply a sidebar control action during an active game."""
+        if self.phase != PHASE_GAME or action is None:
+            return False
+
+        if action == SIDEBAR_ACTION_TOGGLE_WIN_RATE:
+            self.show_win_rate_prediction = not self.show_win_rate_prediction
+            self._refresh_first_player_win_rate()
+            return True
+
+        if action == SIDEBAR_ACTION_TOGGLE_SUGGESTIONS:
+            self.show_move_suggestions = not self.show_move_suggestions
+            self._refresh_move_suggestions()
+            return True
+
+        if action == SIDEBAR_ACTION_END_MATCH:
+            return self.end_match_early()
+
+        return False
+
+    def end_match_early(self) -> bool:
+        """End an active match and settle the winner from the current board score."""
+        if self.phase != PHASE_GAME or self.state is None:
+            return False
+        self._end_game(info="Match ended early; current score settled.")
+        return True
+
     def play_human_move(self, move: Move) -> bool:
         if self.phase != PHASE_GAME or self.state is None:
             return False
@@ -399,7 +443,7 @@ class GameController:
 
     def _turn_info(self, player: int) -> str:
         if self.mode == MODE_PVE:
-            return "Thinking..." if player == self.ai_player else "Your turn."
+            return f"{self.player_names[player]} TO MOVE."
         return f"{self.player_names[player]}'s turn."
 
     def _is_terminal(self) -> bool:
@@ -413,7 +457,7 @@ class GameController:
         player = self.current_player
         return bool(legal_moves(self.state, player))
 
-    def _end_game(self) -> None:
+    def _end_game(self, *, info: str = "Game over.") -> None:
         if self.state is None:
             return
 
@@ -421,7 +465,7 @@ class GameController:
         self.winner = game_winner
         self.winner_name = self._winner_name(game_winner)
         self.phase = PHASE_END
-        self.info = "Game over."
+        self.info = info
         self.win_rate_invalid = False
         self.move_suggestions = ()
         if game_winner == EMPTY:
@@ -434,7 +478,7 @@ class GameController:
             self.error_sink(f"PVE AI inference failed: {error}")
 
     def _refresh_first_player_win_rate(self) -> None:
-        if self.state is None:
+        if self.state is None or not self.show_win_rate_prediction:
             self.first_player_win_rate = None
             self.win_rate_invalid = False
             return
@@ -464,7 +508,11 @@ class GameController:
                 self._win_rate_error_reported = True
 
     def _refresh_move_suggestions(self) -> None:
-        if self.phase != PHASE_GAME or self.state is None:
+        if (
+            self.phase != PHASE_GAME
+            or self.state is None
+            or not self.show_move_suggestions
+        ):
             self.move_suggestions = ()
             return
 
@@ -508,5 +556,5 @@ class GameController:
         if game_winner == EMPTY:
             return "Draw"
         if self.mode == MODE_PVE:
-            return "You" if game_winner == self.human_player else "Computer"
+            return "YOU" if game_winner == self.human_player else "COMPUTER"
         return self.player_names[game_winner]

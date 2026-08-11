@@ -11,6 +11,9 @@ from src.ui.game_controller import (
     PHASE_GAME,
     PHASE_LOADING,
     PHASE_START,
+    SIDEBAR_ACTION_END_MATCH,
+    SIDEBAR_ACTION_TOGGLE_SUGGESTIONS,
+    SIDEBAR_ACTION_TOGGLE_WIN_RATE,
 )
 from src.ui.pygame_renderer import PygameRenderer
 
@@ -90,11 +93,11 @@ def test_pve_controller_falls_back_when_ai_inference_fails(monkeypatch):
     )
 
     controller.start_game()
-    assert controller.info == "Your turn."
+    assert controller.info == "YOU TO MOVE."
     controller.play_human_move((0, 1))
 
     assert controller.current_player == PLAYER_TWO
-    assert controller.info == "Thinking..."
+    assert controller.info == "COMPUTER TO MOVE."
     assert controller.play_ai_turn()
     assert fallback.calls
     assert "PVE AI inference failed" in errors[0]
@@ -272,7 +275,7 @@ def test_pve_winner_name_uses_human_and_computer_labels():
     )
 
     controller._end_game()
-    assert controller.winner_name == "You"
+    assert controller.winner_name == "YOU"
 
     controller.state = state_from_board(
         [
@@ -284,7 +287,56 @@ def test_pve_winner_name_uses_human_and_computer_labels():
     )
 
     controller._end_game()
-    assert controller.winner_name == "Computer"
+    assert controller.winner_name == "COMPUTER"
+
+
+def test_pve_snapshot_uses_you_and_computer_for_each_assigned_side(monkeypatch):
+    monkeypatch.setattr("src.ui.game_controller.random.choice", lambda players: PLAYER_TWO)
+    controller = GameController(
+        mode=MODE_PVE,
+        board_size=4,
+        ai_policy=FailingPolicy(),
+        error_sink=None,
+    )
+
+    controller.start_game()
+
+    snapshot = controller.snapshot()
+    assert snapshot.player_names == {
+        PLAYER_ONE: "COMPUTER",
+        PLAYER_TWO: "YOU",
+    }
+    assert controller.info == "COMPUTER TO MOVE."
+
+
+def test_sidebar_actions_toggle_analysis_and_settle_current_score():
+    policy = SuggestingPolicy()
+    controller = GameController(
+        mode=MODE_PVP,
+        board_size=4,
+        ai_policy=policy,
+        error_sink=None,
+    )
+    controller.start_game()
+
+    assert controller.handle_sidebar_action(SIDEBAR_ACTION_TOGGLE_WIN_RATE)
+    snapshot = controller.snapshot()
+    assert not snapshot.show_win_rate_prediction
+    assert snapshot.first_player_win_rate is None
+
+    assert controller.handle_sidebar_action(SIDEBAR_ACTION_TOGGLE_SUGGESTIONS)
+    snapshot = controller.snapshot()
+    assert not snapshot.show_move_suggestions
+    assert snapshot.move_suggestions == ()
+
+    assert controller.play_human_move((0, 1))
+    expected_scores = dict(controller.snapshot().scores)
+    assert controller.handle_sidebar_action(SIDEBAR_ACTION_END_MATCH)
+    snapshot = controller.snapshot()
+    assert snapshot.phase == PHASE_END
+    assert snapshot.scores == expected_scores
+    assert snapshot.winner == PLAYER_ONE
+    assert snapshot.info == "Match ended early; current score settled."
 
 
 def test_renderer_only_shows_win_rate_bar_during_gameplay():
@@ -354,6 +406,52 @@ def test_renderer_maps_start_buttons_to_modes():
     assert renderer.start_mode_at(_rect_center(pvp_rect)) == MODE_PVP
     assert renderer.start_mode_at(_rect_center(pve_rect)) == MODE_PVE
     assert renderer.start_mode_at((0, 0)) is None
+
+
+def test_renderer_labels_pve_sides_and_maps_sidebar_controls():
+    renderer = object.__new__(PygameRenderer)
+    renderer.show_winrate_bar = True
+    renderer.sidebar_rect = (0, 0, 220, 540)
+    snapshot = GameSnapshot(
+        phase=PHASE_GAME,
+        board_size=4,
+        state=None,
+        current_player=PLAYER_ONE,
+        scores={0: 16, PLAYER_ONE: 0, PLAYER_TWO: 0},
+        winner=0,
+        winner_name="",
+        info="YOU TO MOVE.",
+        mode=MODE_PVE,
+        player_names={PLAYER_ONE: "YOU", PLAYER_TWO: "COMPUTER"},
+    )
+
+    assert renderer._player_label(snapshot, PLAYER_ONE) == "YOU"
+    assert renderer._player_label(snapshot, PLAYER_TWO) == "COMPUTER"
+    assert renderer._end_title("YOU") == "YOU WIN"
+    assert renderer._end_title("COMPUTER") == "COMPUTER WINS"
+
+    controls = renderer._control_rects(snapshot)
+    assert (
+        renderer.sidebar_action_at(
+            _rect_center(controls[SIDEBAR_ACTION_TOGGLE_WIN_RATE]),
+            snapshot,
+        )
+        == SIDEBAR_ACTION_TOGGLE_WIN_RATE
+    )
+    assert (
+        renderer.sidebar_action_at(
+            _rect_center(controls[SIDEBAR_ACTION_TOGGLE_SUGGESTIONS]),
+            snapshot,
+        )
+        == SIDEBAR_ACTION_TOGGLE_SUGGESTIONS
+    )
+    assert (
+        renderer.sidebar_action_at(
+            _rect_center(controls[SIDEBAR_ACTION_END_MATCH]),
+            snapshot,
+        )
+        == SIDEBAR_ACTION_END_MATCH
+    )
 
 
 def test_renderer_uses_board_plus_sidebar_layout():
@@ -445,7 +543,7 @@ def test_pve_controller_can_assign_ai_as_first_player(monkeypatch):
     assert controller.ai_player == PLAYER_ONE
     assert controller.current_player == PLAYER_ONE
     assert controller.is_ai_turn
-    assert controller.info == "Thinking..."
+    assert controller.info == "COMPUTER TO MOVE."
 
 
 def test_unknown_ui_mode_is_rejected():

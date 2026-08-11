@@ -75,6 +75,9 @@ Expected behavior:
   gameplay.
 - Missing model dependencies should put the bar in the `Invalid` 50:50 state,
   produce a clear error message, and use fallback legal moves for AI turns.
+- PvE labels the assigned sides as `YOU` and `COMPUTER` throughout the desktop
+  UI. The gameplay sidebar can hide either model-analysis view and can end a
+  match early, using the current canonical board score for the result.
 
 ### Training and Self-Play
 

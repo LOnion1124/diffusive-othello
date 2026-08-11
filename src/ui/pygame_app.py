@@ -90,7 +90,12 @@ def main(argv: list[str] | None = None) -> int:
             start_mode = None
             if controller.phase == PHASE_START:
                 start_mode = renderer.start_mode_at(pointer.position)
-            controller.handle_click(pointer.clicked, pointer.move, start_mode=start_mode)
+            sidebar_action = renderer.sidebar_action_at(
+                pointer.position,
+                controller.snapshot(),
+            )
+            if not controller.handle_sidebar_action(sidebar_action):
+                controller.handle_click(pointer.clicked, pointer.move, start_mode=start_mode)
 
             if controller.phase == PHASE_LOADING:
                 if loading_future is None:

@@ -13,6 +13,9 @@ from src.ui.game_controller import (
     PHASE_GAME,
     PHASE_LOADING,
     PHASE_START,
+    SIDEBAR_ACTION_END_MATCH,
+    SIDEBAR_ACTION_TOGGLE_SUGGESTIONS,
+    SIDEBAR_ACTION_TOGGLE_WIN_RATE,
 )
 
 
@@ -30,6 +33,8 @@ class PygameRenderer:
     SIDEBAR_WIDTH = 220
     CONTENT_GAP = 24
     CARD_RADIUS = 16
+    MIN_PANEL_HEIGHT = 540
+    CONTROL_CARD_HEIGHT = 150
     PIECE_ANIMATION_MS = 170
     PIECE_FLIP_ANIMATION_MS = 260
     SUGGESTION_HINT_MAX_RADIUS = GRID_SIZE // 2 - 5
@@ -63,6 +68,8 @@ class PygameRenderer:
     COLOR_SUGGESTION_PRIMARY = (242, 245, 244)
     COLOR_SUGGESTION_SECONDARY = (191, 203, 200)
     COLOR_MOVE_HINT = COLOR_SUGGESTION_SECONDARY
+    COLOR_END_BUTTON = (224, 174, 158)
+    COLOR_END_BUTTON_HOVER = (210, 151, 135)
 
     def __init__(
         self,
@@ -77,6 +84,7 @@ class PygameRenderer:
         self.board_size = board_size
         self.show_winrate_bar = show_winrate_bar
         self.board_length = self.board_size * self.GRID_SIZE
+        self.panel_height = max(self.board_length, self.MIN_PANEL_HEIGHT)
         self.window_width, self.window_height = self.screen_size(
             self.board_size,
             show_winrate_bar=self.show_winrate_bar,
@@ -89,13 +97,13 @@ class PygameRenderer:
             self.board_left_top[0] + self.board_length + self.CONTENT_GAP,
             self.board_left_top[1],
             self.SIDEBAR_WIDTH,
-            self.board_length,
+            self.panel_height,
         )
         self.content_rect = (
             self.OUTER_PADDING,
             self.board_left_top[1],
             self.window_width - 2 * self.OUTER_PADDING,
-            self.board_length,
+            self.panel_height,
         )
         self.piece_radius = round(self.GRID_SIZE * 0.36)
 
@@ -123,9 +131,10 @@ class PygameRenderer:
         the projection now lives in the sidebar rather than changing height.
         """
         board_length = board_size * cls.GRID_SIZE
+        panel_height = max(board_length, cls.MIN_PANEL_HEIGHT)
         return (
             2 * cls.OUTER_PADDING + board_length + cls.CONTENT_GAP + cls.SIDEBAR_WIDTH,
-            2 * cls.OUTER_PADDING + cls.HEADER_HEIGHT + cls.HEADER_GAP + board_length,
+            2 * cls.OUTER_PADDING + cls.HEADER_HEIGHT + cls.HEADER_GAP + panel_height,
         )
 
     def draw(self, snapshot: GameSnapshot, *, now_ms: int | None = None) -> None:
@@ -201,7 +210,7 @@ class PygameRenderer:
             6,
         )
         turn_label = (
-            f"P{1 if snapshot.current_player == PLAYER_ONE else 2} TO MOVE"
+            f"{self._player_label(snapshot, snapshot.current_player)} TO MOVE"
             if snapshot.phase == PHASE_GAME
             else "FINISHED"
         )
@@ -488,6 +497,9 @@ class PygameRenderer:
             projection_height = 126
             self._draw_projection_card(snapshot, (left, next_top, width, projection_height))
             next_top += projection_height + 16
+        controls_rect = (left, next_top, width, self.CONTROL_CARD_HEIGHT)
+        self._draw_controls_card(snapshot, controls_rect)
+        next_top += self.CONTROL_CARD_HEIGHT + 16
         self._draw_status_card(snapshot, (left, next_top, width, top + height - next_top))
 
     def _draw_score_card(self, snapshot: GameSnapshot, rect: tuple[int, int, int, int]) -> None:
@@ -525,7 +537,7 @@ class PygameRenderer:
         self.pygame.draw.circle(self.screen, self._player_dark_color(player), (left + 12, center_y + 1), 10)
         self.pygame.draw.circle(self.screen, self._player_color(player), (left + 12, center_y), 9)
         self._blit_text(
-            self._player_label(player),
+            self._player_label(snapshot, player),
             self.font_tiny,
             self.COLOR_TEXT if is_current else self.COLOR_TEXT_MUTED,
             midleft=(left + 34, center_y),
@@ -581,26 +593,122 @@ class PygameRenderer:
         )
 
         first_percent = round(fill_rate * 100)
-        self._blit_text("P1", self.font_tiny, self.COLOR_PLAYER1_DARK, topleft=(bar_left, top + 77))
         self._blit_text(
-            f"{first_percent}%",
+            f"{self._player_label(snapshot, PLAYER_ONE)} {first_percent}%",
             self.font_tiny,
-            self.COLOR_TEXT,
-            topleft=(bar_left + 24, top + 77),
+            self.COLOR_PLAYER1_DARK,
+            topleft=(bar_left, top + 77),
         )
         self._blit_text(
-            f"{100 - first_percent}%",
+            f"{100 - first_percent}% {self._player_label(snapshot, PLAYER_TWO)}",
             self.font_tiny,
-            self.COLOR_TEXT,
-            topright=(bar_left + bar_width - 24, top + 77),
+            self.COLOR_PLAYER2_DARK,
+            topright=(bar_left + bar_width, top + 77),
         )
-        self._blit_text("P2", self.font_tiny, self.COLOR_PLAYER2_DARK, topright=(bar_left + bar_width, top + 77))
         label = "Model unavailable" if snapshot.win_rate_invalid else "Estimated outcome"
         self._blit_text(label, self.font_tiny, self.COLOR_TEXT_MUTED, topleft=(bar_left, top + 99))
+
+    def _draw_controls_card(
+        self,
+        snapshot: GameSnapshot,
+        rect: tuple[int, int, int, int],
+    ) -> None:
+        left, top, width, _ = rect
+        self._draw_card(rect, fill=self.COLOR_SURFACE)
+        self._blit_text(
+            "MATCH CONTROLS",
+            self.font_tiny,
+            self.COLOR_TEXT_MUTED,
+            topleft=(left + 18, top + 16),
+        )
+        controls = self._control_rects(snapshot)
+        self._draw_checkbox(
+            "Show win projection",
+            snapshot.show_win_rate_prediction,
+            controls[SIDEBAR_ACTION_TOGGLE_WIN_RATE],
+        )
+        self._draw_checkbox(
+            "Show move suggestions",
+            snapshot.show_move_suggestions,
+            controls[SIDEBAR_ACTION_TOGGLE_SUGGESTIONS],
+        )
+        self._draw_end_match_button(controls[SIDEBAR_ACTION_END_MATCH])
+
+    def _draw_checkbox(
+        self,
+        label: str,
+        checked: bool,
+        rect: tuple[int, int, int, int],
+    ) -> None:
+        left, top, width, height = rect
+        hovered = self._point_in_rect(self.pygame.mouse.get_pos(), rect)
+        if hovered:
+            self.pygame.draw.rect(
+                self.screen,
+                self.COLOR_SURFACE_MUTED,
+                rect,
+                border_radius=8,
+            )
+        box_size = 16
+        box_rect = (left + 8, top + (height - box_size) // 2, box_size, box_size)
+        self.pygame.draw.rect(
+            self.screen,
+            self.COLOR_BOARD if checked else self.COLOR_SURFACE,
+            box_rect,
+            border_radius=4,
+        )
+        self.pygame.draw.rect(
+            self.screen,
+            self.COLOR_BOARD if checked else self.COLOR_BORDER,
+            box_rect,
+            width=1,
+            border_radius=4,
+        )
+        if checked:
+            box_left, box_top, _, _ = box_rect
+            self.pygame.draw.line(
+                self.screen,
+                self.COLOR_SURFACE,
+                (box_left + 3, box_top + 8),
+                (box_left + 7, box_top + 12),
+                width=2,
+            )
+            self.pygame.draw.line(
+                self.screen,
+                self.COLOR_SURFACE,
+                (box_left + 7, box_top + 12),
+                (box_left + 13, box_top + 4),
+                width=2,
+            )
+        self._blit_text(
+            label,
+            self.font_tiny,
+            self.COLOR_TEXT,
+            midleft=(left + 32, top + height // 2),
+        )
+
+    def _draw_end_match_button(self, rect: tuple[int, int, int, int]) -> None:
+        hovered = self._point_in_rect(self.pygame.mouse.get_pos(), rect)
+        fill = self.COLOR_END_BUTTON_HOVER if hovered else self.COLOR_END_BUTTON
+        self.pygame.draw.rect(self.screen, fill, rect, border_radius=8)
+        self._blit_text(
+            "END MATCH",
+            self.font_tiny,
+            self.COLOR_TEXT,
+            center=(rect[0] + rect[2] // 2, rect[1] + rect[3] // 2),
+        )
 
     def _draw_status_card(self, snapshot: GameSnapshot, rect: tuple[int, int, int, int]) -> None:
         left, top, width, height = rect
         self._draw_card(rect, fill=self.COLOR_SURFACE)
+        if height < 80:
+            self._blit_text(
+                snapshot.info,
+                self.font_tiny,
+                self.COLOR_TEXT_MUTED,
+                center=(left + width // 2, top + height // 2),
+            )
+            return
         self._blit_text("STATUS", self.font_tiny, self.COLOR_TEXT_MUTED, topleft=(left + 18, top + 16))
         lines = self._wrap_text(snapshot.info, self.font_small, width - 36)
         line_height = self.font_small.get_linesize()
@@ -640,7 +748,7 @@ class PygameRenderer:
         top = self.board_left_top[1] + (self.board_length - modal_height) // 2
         self._draw_card((left, top, modal_width, modal_height), fill=self.COLOR_SURFACE)
 
-        title = "DRAW" if snapshot.winner_name == "Draw" else f"{snapshot.winner_name.upper()} WINS"
+        title = self._end_title(snapshot.winner_name)
         self._blit_text(title, self.font_large, self.COLOR_TEXT, center=(left + modal_width // 2, top + 55))
         score_text = f"{snapshot.scores[PLAYER_ONE]}  —  {snapshot.scores[PLAYER_TWO]}"
         self._blit_text(score_text, self.font_display, self.COLOR_TEXT, center=(left + modal_width // 2, top + 111))
@@ -797,7 +905,11 @@ class PygameRenderer:
         return self._displayed_winrate
 
     def _should_draw_winrate_bar(self, snapshot: GameSnapshot) -> bool:
-        return self.show_winrate_bar and snapshot.phase == PHASE_GAME
+        return (
+            self.show_winrate_bar
+            and snapshot.phase == PHASE_GAME
+            and snapshot.show_win_rate_prediction
+        )
 
     def start_mode_at(self, position: tuple[int, int] | None) -> str | None:
         if position is None:
@@ -805,6 +917,19 @@ class PygameRenderer:
         for mode, rect in self._start_button_rects().items():
             if self._point_in_rect(position, rect):
                 return mode
+        return None
+
+    def sidebar_action_at(
+        self,
+        position: tuple[int, int] | None,
+        snapshot: GameSnapshot,
+    ) -> str | None:
+        """Return the active-game sidebar control at ``position``, if any."""
+        if position is None or snapshot.phase != PHASE_GAME:
+            return None
+        for action, rect in self._control_rects(snapshot).items():
+            if self._point_in_rect(position, rect):
+                return action
         return None
 
     @staticmethod
@@ -862,6 +987,19 @@ class PygameRenderer:
             MODE_PVE: (left + button_width + gap, top, button_width, button_height),
         }
 
+    def _control_rects(self, snapshot: GameSnapshot) -> dict[str, tuple[int, int, int, int]]:
+        left, top, width, _ = self.sidebar_rect
+        controls_top = top + 160 + 16
+        if self._should_draw_winrate_bar(snapshot):
+            controls_top += 126 + 16
+        content_left = left + 10
+        content_width = width - 20
+        return {
+            SIDEBAR_ACTION_TOGGLE_WIN_RATE: (content_left, controls_top + 39, content_width, 25),
+            SIDEBAR_ACTION_TOGGLE_SUGGESTIONS: (content_left, controls_top + 68, content_width, 25),
+            SIDEBAR_ACTION_END_MATCH: (content_left, controls_top + 108, content_width, 28),
+        }
+
     @staticmethod
     def _point_in_rect(
         position: tuple[int, int],
@@ -871,7 +1009,17 @@ class PygameRenderer:
         left, top, width, height = rect
         return left <= x_pos < left + width and top <= y_pos < top + height
 
-    def _player_label(self, player: int) -> str:
+    @staticmethod
+    def _end_title(winner_name: str) -> str:
+        if winner_name == "Draw":
+            return "DRAW"
+        suffix = "WIN" if winner_name.upper() == "YOU" else "WINS"
+        return f"{winner_name.upper()} {suffix}"
+
+    @staticmethod
+    def _player_label(snapshot: GameSnapshot, player: int) -> str:
+        if snapshot.player_names is not None:
+            return snapshot.player_names[player]
         return "PLAYER 1" if player == PLAYER_ONE else "PLAYER 2"
 
     def _player_color(self, player: int) -> tuple[int, int, int]:

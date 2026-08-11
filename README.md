@@ -41,6 +41,12 @@ available.
 
 Both GUI modes show a first-player vs. second-player win-rate prediction bar during gameplay. The bar attempts to load the configured model in either PVP or PVE; if the model or optional AI dependencies are unavailable, it locks to 50:50 and displays `Invalid`. PVE also reports the error in the terminal and uses a simple legal-move fallback for AI moves.
 
+In PvE, the sidebar, turn indicator, win projection, and result dialog identify the
+two sides as `YOU` and `COMPUTER`; a `YOU` victory is displayed as `YOU WIN`.
+The sidebar also provides checkboxes to hide or restore the win projection and
+move suggestions, plus `END MATCH` to end the current game and settle its
+current board score immediately.
+
 When model inference is available, the board uses the existing legal-move
 breathing highlight for the current human player's three highest-probability
 policy moves. Their center dots become probability values; the expanded ring
