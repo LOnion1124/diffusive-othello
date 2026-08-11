@@ -32,6 +32,8 @@ class PygameRenderer:
     CARD_RADIUS = 16
     PIECE_ANIMATION_MS = 170
     PIECE_FLIP_ANIMATION_MS = 260
+    SUGGESTION_HINT_MAX_RADIUS = GRID_SIZE // 2 - 5
+    SUGGESTION_HINT_MIN_RADIUS = SUGGESTION_HINT_MAX_RADIUS - 3
 
     # Warm desktop surfaces, a jade board, and blue/orange player colors make
     # the board legible without relying on the red-versus-green distinction.
@@ -56,9 +58,11 @@ class PygameRenderer:
     COLOR_OVERLAY = (16, 42, 37)
     COLOR_BUTTON = COLOR_SURFACE
     COLOR_BUTTON_BORDER = COLOR_BORDER
-    COLOR_MOVE_HINT = COLOR_ACCENT
     COLOR_WINRATE_BACKGROUND = COLOR_SURFACE_MUTED
     COLOR_WINRATE_BORDER = COLOR_BORDER
+    COLOR_SUGGESTION_PRIMARY = (242, 245, 244)
+    COLOR_SUGGESTION_SECONDARY = (191, 203, 200)
+    COLOR_MOVE_HINT = COLOR_SUGGESTION_SECONDARY
 
     def __init__(
         self,
@@ -440,14 +444,39 @@ class PygameRenderer:
         left, top = self.board_left_top
         hint_color = self._player_color(snapshot.current_player)
         pulse = 0.5 + 0.5 * math.sin(now_ms / 250)
-        hint_radius = max(7, round(self.GRID_SIZE * (0.13 + 0.035 * pulse)))
+        base_hint_radius = max(7, round(self.GRID_SIZE * (0.13 + 0.035 * pulse)))
+        suggestions = {
+            suggestion.move: (rank, suggestion.probability)
+            for rank, suggestion in enumerate(snapshot.move_suggestions, start=1)
+        }
         for x, y in snapshot.legal_place_moves:
             center = (
                 left + (self.GRID_SIZE // 2) + x * self.GRID_SIZE,
                 top + (self.GRID_SIZE // 2) + y * self.GRID_SIZE,
             )
-            self.pygame.draw.circle(self.screen, hint_color, center, hint_radius, width=2)
-            self.pygame.draw.circle(self.screen, self.COLOR_MOVE_HINT, center, 3)
+            suggestion = suggestions.get((x, y))
+            if suggestion is None:
+                self.pygame.draw.circle(
+                    self.screen,
+                    hint_color,
+                    center,
+                    base_hint_radius,
+                    width=2,
+                )
+                self.pygame.draw.circle(self.screen, self.COLOR_MOVE_HINT, center, 3)
+                continue
+
+            rank, probability = suggestion
+            label = self._format_suggestion_probability(probability)
+            suggestion_color = self._suggestion_color(rank)
+            self.pygame.draw.circle(
+                self.screen,
+                hint_color,
+                center,
+                self._suggestion_hint_radius(pulse),
+                width=2,
+            )
+            self._blit_text(label, self.font_tiny, suggestion_color, center=center)
 
     def _draw_sidebar(self, snapshot: GameSnapshot) -> None:
         left, top, width, height = self.sidebar_rect
@@ -584,8 +613,17 @@ class PygameRenderer:
                 center=(left + width // 2, text_top + index * line_height),
             )
         if snapshot.phase == PHASE_GAME:
+            helper_text = (
+                "AI Top 3: probability + shade"
+                if snapshot.move_suggestions
+                else (
+                    "Computer is choosing a move"
+                    if snapshot.mode == MODE_PVE and not snapshot.legal_place_moves
+                    else "Select a glowing position"
+                )
+            )
             self._blit_text(
-                "Select a glowing position",
+                helper_text,
                 self.font_tiny,
                 self.COLOR_TEXT_MUTED,
                 center=(left + width // 2, top + height - 23),
@@ -783,6 +821,27 @@ class PygameRenderer:
         first_percent = round(fill_rate * 100)
         second_percent = 100 - first_percent
         return f"{first_percent:d} : {second_percent:d}"
+
+    @staticmethod
+    def _format_suggestion_probability(probability: float) -> str:
+        return f"{max(0.0, min(1.0, probability)) * 100:.1f}%"
+
+    @classmethod
+    def _suggestion_color(cls, rank: int) -> tuple[int, int, int]:
+        return (
+            cls.COLOR_SUGGESTION_PRIMARY
+            if rank == 1
+            else cls.COLOR_SUGGESTION_SECONDARY
+        )
+
+    @classmethod
+    def _suggestion_hint_radius(cls, pulse: float) -> int:
+        normalized_pulse = max(0.0, min(1.0, pulse))
+        return round(
+            cls.SUGGESTION_HINT_MIN_RADIUS
+            + (cls.SUGGESTION_HINT_MAX_RADIUS - cls.SUGGESTION_HINT_MIN_RADIUS)
+            * normalized_pulse
+        )
 
     @staticmethod
     def _winrate_fill_rate(snapshot: GameSnapshot) -> float:

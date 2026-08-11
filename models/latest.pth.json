@@ -7,7 +7,7 @@
     "num_res_blocks": 6,
     "value_hidden_dim": 128
   },
-  "dataset_path": "data/continue1_stage5.pt",
+  "dataset_path": "data/continue2_stage5.pt",
   "init_checkpoint": "models/latest.pth",
   "dataset_format_version": "az-do-dataset-v2",
   "rule_version": "diffusive-othello-rules-v2",
@@ -20,286 +20,320 @@
   "weight_decay": 0.0001,
   "optimizer": "Adam",
   "steps": 3010,
-  "output_path": "models/continue1_stage5.pth",
-  "last_loss": 1.9887350797653198,
-  "last_policy_loss": 1.6138147115707397,
-  "last_value_loss": 0.37492039799690247,
+  "output_path": "models/continue2_stage5.pth",
+  "last_loss": 2.06919527053833,
+  "last_policy_loss": 1.6861814260482788,
+  "last_value_loss": 0.3830138146877289,
   "arena": {
-    "candidate_wins": 80,
-    "incumbent_wins": 0,
+    "candidate_wins": 27,
+    "incumbent_wins": 13,
     "draws": 0,
     "games": [
       {
         "game_index": 0,
         "candidate_player": 1,
         "winner": 1,
-        "candidate_margin": 13,
+        "candidate_margin": 15,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 6,
+        "game_seed": 8702403521745022116
       },
       {
         "game_index": 1,
-        "candidate_player": -1,
+        "candidate_player": 1,
         "winner": -1,
-        "candidate_margin": 13,
+        "candidate_margin": -13,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 0,
+        "game_seed": 8451780157322151613
       },
       {
         "game_index": 2,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
+        "candidate_player": -1,
+        "winner": -1,
+        "candidate_margin": 7,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 1,
+        "game_seed": 228056401305676080
       },
       {
         "game_index": 3,
         "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
+        "winner": 1,
+        "candidate_margin": -15,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 8,
+        "game_seed": 3230281251073663985
       },
       {
         "game_index": 4,
         "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
+        "winner": -1,
+        "candidate_margin": -21,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 1,
+        "game_seed": 4000450299184137135
       },
       {
         "game_index": 5,
         "candidate_player": -1,
         "winner": -1,
-        "candidate_margin": 13,
+        "candidate_margin": 21,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 1,
+        "game_seed": 4646048959891039864
       },
       {
         "game_index": 6,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
+        "candidate_player": -1,
+        "winner": -1,
+        "candidate_margin": 21,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 1,
+        "game_seed": 1493010204908578955
       },
       {
         "game_index": 7,
         "candidate_player": -1,
         "winner": -1,
-        "candidate_margin": 13,
+        "candidate_margin": 19,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 3,
+        "game_seed": 3823241689507245
       },
       {
         "game_index": 8,
         "candidate_player": 1,
         "winner": 1,
-        "candidate_margin": 13,
+        "candidate_margin": 9,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 0,
+        "game_seed": 6334717592257112796
       },
       {
         "game_index": 9,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
+        "candidate_player": 1,
+        "winner": 1,
+        "candidate_margin": 11,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 0,
+        "game_seed": 34996434480255603
       },
       {
         "game_index": 10,
         "candidate_player": 1,
         "winner": 1,
-        "candidate_margin": 13,
+        "candidate_margin": 1,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 0,
+        "game_seed": 639251915882288651
       },
       {
         "game_index": 11,
-        "candidate_player": -1,
+        "candidate_player": 1,
         "winner": -1,
-        "candidate_margin": 13,
+        "candidate_margin": -13,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 5,
+        "game_seed": 8125187436745394554
       },
       {
         "game_index": 12,
-        "candidate_player": 1,
+        "candidate_player": -1,
         "winner": 1,
-        "candidate_margin": 13,
+        "candidate_margin": -15,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 2,
+        "game_seed": 8269040652322651772
       },
       {
         "game_index": 13,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
+        "candidate_player": 1,
+        "winner": 1,
+        "candidate_margin": 7,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 2,
+        "game_seed": 1007368135590093444
       },
       {
         "game_index": 14,
         "candidate_player": 1,
         "winner": 1,
-        "candidate_margin": 13,
+        "candidate_margin": 1,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 0,
+        "game_seed": 6176175302969566861
       },
       {
         "game_index": 15,
         "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
+        "winner": 1,
+        "candidate_margin": -1,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 4,
+        "game_seed": 6677415330903665535
       },
       {
         "game_index": 16,
         "candidate_player": 1,
         "winner": 1,
-        "candidate_margin": 13,
+        "candidate_margin": 3,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 1,
+        "game_seed": 2659748999024631855
       },
       {
         "game_index": 17,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
+        "candidate_player": 1,
+        "winner": 1,
+        "candidate_margin": 3,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 0,
+        "game_seed": 3716652714615592940
       },
       {
         "game_index": 18,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
+        "candidate_player": -1,
+        "winner": -1,
+        "candidate_margin": 3,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 1,
+        "game_seed": 6375328450846243105
       },
       {
         "game_index": 19,
         "candidate_player": -1,
         "winner": -1,
-        "candidate_margin": 13,
+        "candidate_margin": 3,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 0,
+        "game_seed": 6025404960874724347
       },
       {
         "game_index": 20,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
+        "candidate_player": -1,
+        "winner": -1,
+        "candidate_margin": 1,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 1,
+        "game_seed": 7551285153153000371
       },
       {
         "game_index": 21,
-        "candidate_player": -1,
+        "candidate_player": 1,
         "winner": -1,
-        "candidate_margin": 13,
+        "candidate_margin": -3,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 0,
+        "game_seed": 2652457946849695144
       },
       {
         "game_index": 22,
         "candidate_player": 1,
         "winner": 1,
-        "candidate_margin": 13,
+        "candidate_margin": 5,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 0,
+        "game_seed": 8649351478904059007
       },
       {
         "game_index": 23,
         "candidate_player": -1,
         "winner": -1,
-        "candidate_margin": 13,
+        "candidate_margin": 9,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 3,
+        "game_seed": 1932868404058822886
       },
       {
         "game_index": 24,
         "candidate_player": 1,
         "winner": 1,
-        "candidate_margin": 13,
+        "candidate_margin": 1,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 0,
+        "game_seed": 5002244961234236530
       },
       {
         "game_index": 25,
         "candidate_player": -1,
         "winner": -1,
-        "candidate_margin": 13,
+        "candidate_margin": 15,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 1,
+        "game_seed": 5259727204851272979
       },
       {
         "game_index": 26,
-        "candidate_player": 1,
+        "candidate_player": -1,
         "winner": 1,
-        "candidate_margin": 13,
+        "candidate_margin": -21,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 6,
+        "game_seed": 1599475474692119993
       },
       {
         "game_index": 27,
         "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
+        "winner": 1,
+        "candidate_margin": -3,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 0,
+        "game_seed": 3221839459834422491
       },
       {
         "game_index": 28,
-        "candidate_player": 1,
+        "candidate_player": -1,
         "winner": 1,
-        "candidate_margin": 13,
+        "candidate_margin": -11,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 0,
+        "game_seed": 2582633299555349279
       },
       {
         "game_index": 29,
-        "candidate_player": -1,
-        "winner": -1,
+        "candidate_player": 1,
+        "winner": 1,
         "candidate_margin": 13,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 0,
+        "game_seed": 6844692137213749314
       },
       {
         "game_index": 30,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
+        "candidate_player": -1,
+        "winner": -1,
+        "candidate_margin": 11,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 5,
+        "game_seed": 7400603260239901038
       },
       {
         "game_index": 31,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
+        "candidate_player": 1,
+        "winner": 1,
+        "candidate_margin": 11,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 3,
+        "game_seed": 7641879812860414286
       },
       {
         "game_index": 32,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
+        "candidate_player": -1,
+        "winner": -1,
+        "candidate_margin": 9,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 1,
+        "game_seed": 5470877273937063879
       },
       {
         "game_index": 33,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
+        "candidate_player": 1,
+        "winner": 1,
+        "candidate_margin": 1,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 2,
+        "game_seed": 5949833878614382213
       },
       {
         "game_index": 34,
@@ -307,372 +341,76 @@
         "winner": 1,
         "candidate_margin": 13,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 2,
+        "game_seed": 1679731652306858685
       },
       {
         "game_index": 35,
         "candidate_player": -1,
         "winner": -1,
-        "candidate_margin": 13,
+        "candidate_margin": 1,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 1,
+        "game_seed": 1481332525727961641
       },
       {
         "game_index": 36,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
+        "candidate_player": -1,
+        "winner": -1,
+        "candidate_margin": 11,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 5,
+        "game_seed": 4160641504018682225
       },
       {
         "game_index": 37,
-        "candidate_player": -1,
+        "candidate_player": 1,
         "winner": -1,
-        "candidate_margin": 13,
+        "candidate_margin": -1,
         "move_count": 77,
-        "pass_count": 1
+        "pass_count": 9,
+        "game_seed": 4611157762386934821
       },
       {
         "game_index": 38,
-        "candidate_player": 1,
+        "candidate_player": -1,
         "winner": 1,
-        "candidate_margin": 13,
+        "candidate_margin": -5,
         "move_count": 77,
-        "pass_count": 2
+        "pass_count": 0,
+        "game_seed": 867069137336926886
       },
       {
         "game_index": 39,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 40,
         "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 41,
-        "candidate_player": -1,
         "winner": -1,
-        "candidate_margin": 13,
+        "candidate_margin": -5,
         "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 42,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 43,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 44,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 45,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 46,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 47,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 48,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 49,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 50,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 51,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 52,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 53,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 54,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 55,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 56,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 57,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 58,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 59,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 60,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 61,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 62,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 63,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 64,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 65,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 66,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 67,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 68,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 69,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 70,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 71,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 72,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 73,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 74,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 75,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 76,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 77,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
-      },
-      {
-        "game_index": 78,
-        "candidate_player": 1,
-        "winner": 1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 2
-      },
-      {
-        "game_index": 79,
-        "candidate_player": -1,
-        "winner": -1,
-        "candidate_margin": 13,
-        "move_count": 77,
-        "pass_count": 1
+        "pass_count": 2,
+        "game_seed": 2702383072412092625
       }
     ],
-    "candidate_score": 1.0,
+    "candidate_score": 0.675,
+    "candidate_as_first": {
+      "games": 20,
+      "candidate_wins": 14,
+      "incumbent_wins": 6,
+      "draws": 0,
+      "candidate_score": 0.7,
+      "candidate_margin_sum": 38,
+      "candidate_average_margin": 1.9
+    },
+    "candidate_as_second": {
+      "games": 20,
+      "candidate_wins": 13,
+      "incumbent_wins": 7,
+      "draws": 0,
+      "candidate_score": 0.65,
+      "candidate_margin_sum": 60,
+      "candidate_average_margin": 3.0
+    },
     "incumbent_checkpoint": "models/latest.pth",
-    "minimum_score": 0.525,
+    "minimum_score": 0.5,
     "promoted": true
   }
 }

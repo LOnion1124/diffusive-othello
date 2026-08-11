@@ -6,6 +6,7 @@ from src.ui.game_controller import (
     GameSnapshot,
     MODE_PVE,
     MODE_PVP,
+    MoveSuggestion,
     PHASE_END,
     PHASE_GAME,
     PHASE_LOADING,
@@ -41,6 +42,24 @@ class PredictingPolicy:
     def predict_player_win_rate(self, state, *, current_player, target_player):
         self.prediction_calls.append((state, current_player, target_player))
         return self.win_rate
+
+
+class SuggestingPolicy(PredictingPolicy):
+    def __init__(self):
+        super().__init__()
+        self.suggestion_calls = []
+
+    def suggest_moves(self, state, player, *, limit=3):
+        self.suggestion_calls.append((state, player, limit))
+        moves = legal_moves(state, player)
+        suggestions = [
+            MoveSuggestion(move=(99, 99), probability=0.99),
+            *(
+                MoveSuggestion(move=move, probability=0.50 - index * 0.10)
+                for index, move in enumerate(moves)
+            ),
+        ]
+        return tuple(suggestions[: limit + 1])
 
 
 def test_pvp_controller_does_not_use_ai_policy():
@@ -117,6 +136,48 @@ def test_pvp_controller_requests_win_rate_prediction_without_using_ai_moves():
     assert controller.snapshot().first_player_win_rate == pytest.approx(policy.win_rate)
     assert policy.prediction_calls
     assert policy.move_calls == []
+
+
+def test_controller_exposes_three_legal_ai_move_suggestions():
+    policy = SuggestingPolicy()
+    controller = GameController(
+        mode=MODE_PVP,
+        board_size=4,
+        ai_policy=policy,
+        error_sink=None,
+    )
+
+    controller.start_game()
+
+    snapshot = controller.snapshot()
+    assert policy.suggestion_calls[-1][1:] == (PLAYER_ONE, 3)
+    assert len(snapshot.move_suggestions) == 3
+    assert tuple(suggestion.move for suggestion in snapshot.move_suggestions) == tuple(
+        legal_moves(snapshot.state, PLAYER_ONE)[:3]
+    )
+    assert tuple(suggestion.probability for suggestion in snapshot.move_suggestions) == (
+        0.50,
+        0.40,
+        0.30,
+    )
+
+
+def test_pve_controller_hides_suggestions_during_the_ai_turn(monkeypatch):
+    monkeypatch.setattr("src.ui.game_controller.random.choice", lambda players: PLAYER_TWO)
+    policy = SuggestingPolicy()
+    controller = GameController(
+        mode=MODE_PVE,
+        board_size=4,
+        ai_policy=policy,
+        error_sink=None,
+    )
+
+    controller.start_game()
+
+    assert controller.is_ai_turn
+    assert controller.snapshot().legal_place_moves == ()
+    assert controller.snapshot().move_suggestions == ()
+    assert policy.suggestion_calls == []
 
 
 def test_controller_marks_win_rate_invalid_when_prediction_is_unavailable():
@@ -304,6 +365,21 @@ def test_renderer_formats_win_rate_label_as_score_pair():
     assert PygameRenderer._format_winrate_label(0.73) == "73 : 27"
     assert PygameRenderer._format_winrate_label(None) == "50 : 50"
     assert PygameRenderer._format_winrate_label(0.5, invalid=True) == "Invalid"
+
+
+def test_renderer_formats_suggestion_probability_as_percentage():
+    assert PygameRenderer._format_suggestion_probability(0.732) == "73.2%"
+    assert PygameRenderer._format_suggestion_probability(2.0) == "100.0%"
+
+
+def test_renderer_uses_distinct_shades_for_primary_and_other_suggestions():
+    assert PygameRenderer.COLOR_MOVE_HINT == PygameRenderer.COLOR_SUGGESTION_SECONDARY
+    assert PygameRenderer._suggestion_color(1) == PygameRenderer.COLOR_SUGGESTION_PRIMARY
+    assert PygameRenderer._suggestion_color(2) == PygameRenderer.COLOR_SUGGESTION_SECONDARY
+    assert PygameRenderer._suggestion_color(3) == PygameRenderer.COLOR_SUGGESTION_SECONDARY
+    assert PygameRenderer._suggestion_hint_radius(0.0) == 22
+    assert PygameRenderer._suggestion_hint_radius(1.0) == 25
+    assert PygameRenderer.SUGGESTION_HINT_MAX_RADIUS == PygameRenderer.GRID_SIZE // 2 - 5
 
 
 def test_renderer_tracks_piece_flips_between_snapshots():

@@ -41,6 +41,14 @@ available.
 
 Both GUI modes show a first-player vs. second-player win-rate prediction bar during gameplay. The bar attempts to load the configured model in either PVP or PVE; if the model or optional AI dependencies are unavailable, it locks to 50:50 and displays `Invalid`. PVE also reports the error in the terminal and uses a simple legal-move fallback for AI moves.
 
+When model inference is available, the board uses the existing legal-move
+breathing highlight for the current human player's three highest-probability
+policy moves. Their center dots become probability values; the expanded ring
+keeps the normal legal-move color and breathes up to a cell-safe maximum size,
+while the text uses bright gray for the first choice and light gray for the
+other two.
+PVE hides all legal-position and probability highlights during the AI's turn.
+
 A command-line interface is also provided, but only supports 2-player mode:
 
 ```sh

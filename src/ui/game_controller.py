@@ -49,6 +49,25 @@ class WinRatePolicy(Protocol):
 
 
 @dataclass(frozen=True)
+class MoveSuggestion:
+    """One legal move together with its masked policy probability."""
+
+    move: Move
+    probability: float
+
+
+class MoveSuggestionPolicy(Protocol):
+    def suggest_moves(
+        self,
+        state: GameState,
+        player: int,
+        *,
+        limit: int = 3,
+    ) -> tuple[MoveSuggestion, ...]:
+        """Return up to ``limit`` legal policy suggestions for the position."""
+
+
+@dataclass(frozen=True)
 class GameSnapshot:
     phase: str
     board_size: int
@@ -62,6 +81,7 @@ class GameSnapshot:
     first_player_win_rate: float | None = None
     win_rate_invalid: bool = False
     legal_place_moves: tuple[Move, ...] = ()
+    move_suggestions: tuple[MoveSuggestion, ...] = ()
 
 
 class FirstLegalMovePolicy:
@@ -80,6 +100,8 @@ class LazyAiPolicy:
     def __init__(self) -> None:
         self._ai = None
         self._load_error: RuntimeError | None = None
+        self._prediction_cache_key: tuple[GameState, int] | None = None
+        self._prediction_cache: dict | None = None
 
     def predict_player_win_rate(
         self,
@@ -100,16 +122,41 @@ class LazyAiPolicy:
             raise RuntimeError(f"AI returned illegal move {move} for player {player}.")
         return move
 
+    def suggest_moves(
+        self,
+        state: GameState,
+        player: int,
+        *,
+        limit: int = 3,
+    ) -> tuple[MoveSuggestion, ...]:
+        ai = self._load_ai()
+        prediction = self._predict(state, player)
+        suggestions = ai.suggestions_from_prediction(
+            prediction,
+            board_size=state.size,
+            limit=limit,
+        )
+        return tuple(
+            MoveSuggestion(move=move, probability=probability)
+            for move, probability in suggestions
+        )
+
     def preload(self) -> None:
         """Load the optional model before the first rendered game frame."""
         self._load_ai()
 
     def _predict(self, state: GameState, player: int) -> dict:
-        ai = self._load_ai()
-        return ai.inference(
-            board=[list(row) for row in state.board],
-            player=player,
-        )
+        cache_key = (state, player)
+        if self._prediction_cache_key != cache_key:
+            ai = self._load_ai()
+            self._prediction_cache = ai.inference(
+                board=[list(row) for row in state.board],
+                player=player,
+            )
+            self._prediction_cache_key = cache_key
+        if self._prediction_cache is None:
+            raise RuntimeError("AI prediction cache was unexpectedly empty.")
+        return self._prediction_cache
 
     def _load_ai(self):
         if self._load_error is not None:
@@ -162,6 +209,7 @@ class GameController:
         self.info = "Diffusive Othello"
         self.first_player_win_rate: float | None = None
         self.win_rate_invalid = False
+        self.move_suggestions: tuple[MoveSuggestion, ...] = ()
         self._win_rate_error_reported = False
         self._pending_mode: str | None = None
 
@@ -181,6 +229,7 @@ class GameController:
         if (
             self.phase == PHASE_GAME
             and self.state is not None
+            and not self.is_ai_turn
         ):
             legal_place_moves = tuple(legal_moves(self.state, self.current_player))
         return GameSnapshot(
@@ -196,6 +245,7 @@ class GameController:
             first_player_win_rate=self.first_player_win_rate,
             win_rate_invalid=self.win_rate_invalid,
             legal_place_moves=legal_place_moves,
+            move_suggestions=self.move_suggestions,
         )
 
     def start_game(self, mode: str | None = None) -> None:
@@ -214,10 +264,11 @@ class GameController:
         self.winner_name = ""
         self.first_player_win_rate = None
         self.win_rate_invalid = False
+        self.move_suggestions = ()
         self._win_rate_error_reported = False
         self.info = self._turn_info(self.current_player)
         self._settle_turn()
-        self._refresh_first_player_win_rate()
+        self._refresh_ai_analysis()
 
     def begin_loading(self, mode: str | None = None) -> None:
         """Enter the pre-game loading state without blocking the UI loop."""
@@ -231,6 +282,7 @@ class GameController:
         self.info = "Loading game model..."
         self.first_player_win_rate = None
         self.win_rate_invalid = False
+        self.move_suggestions = ()
         self._win_rate_error_reported = False
 
     def finish_loading(self) -> bool:
@@ -249,6 +301,7 @@ class GameController:
         self.info = "Diffusive Othello"
         self.first_player_win_rate = None
         self.win_rate_invalid = False
+        self.move_suggestions = ()
         self._win_rate_error_reported = False
 
     def handle_click(
@@ -293,7 +346,7 @@ class GameController:
 
         self.state = apply_move(self.state, player, move).state
         self._settle_turn()
-        self._refresh_first_player_win_rate()
+        self._refresh_ai_analysis()
         return True
 
     def play_ai_turn(self) -> bool:
@@ -312,7 +365,7 @@ class GameController:
 
         self.state = apply_move(self.state, player, move).state
         self._settle_turn(keep_existing_info=fallback_used)
-        self._refresh_first_player_win_rate()
+        self._refresh_ai_analysis()
         return True
 
     @property
@@ -370,6 +423,7 @@ class GameController:
         self.phase = PHASE_END
         self.info = "Game over."
         self.win_rate_invalid = False
+        self.move_suggestions = ()
         if game_winner == EMPTY:
             self.first_player_win_rate = 0.5
         else:
@@ -408,6 +462,40 @@ class GameController:
             if self.error_sink is not None and not self._win_rate_error_reported:
                 self.error_sink(f"Win-rate prediction failed: {exc}")
                 self._win_rate_error_reported = True
+
+    def _refresh_move_suggestions(self) -> None:
+        if self.phase != PHASE_GAME or self.state is None:
+            self.move_suggestions = ()
+            return
+
+        if self.mode == MODE_PVE and self.current_player == self.ai_player:
+            self.move_suggestions = ()
+            return
+
+        suggester = getattr(self.ai_policy, "suggest_moves", None)
+        if not callable(suggester):
+            self.move_suggestions = ()
+            return
+
+        try:
+            suggestions = tuple(
+                suggester(self.state, self.current_player, limit=3)
+            )
+        except Exception:
+            self.move_suggestions = ()
+            return
+
+        legal = set(legal_moves(self.state, self.current_player))
+        self.move_suggestions = tuple(
+            suggestion
+            for suggestion in suggestions
+            if suggestion.move in legal
+        )[:3]
+
+    def _refresh_ai_analysis(self) -> None:
+        """Refresh both UI analysis views from the current model prediction."""
+        self._refresh_first_player_win_rate()
+        self._refresh_move_suggestions()
 
     @staticmethod
     def _normalize_mode(mode: str) -> str:

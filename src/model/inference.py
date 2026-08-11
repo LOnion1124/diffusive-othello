@@ -1,7 +1,12 @@
+"""Torch-backed inference adapter for the AlphaNet policy and value heads."""
+
+from __future__ import annotations
+
 import torch
-from src.model.alphanet.network import AlphaNet
-from src.game.state import encode_state, legal_mask, state_from_board
+
 from src.config import get_ai_config, get_alphanet_kwargs, resolve_torch_device
+from src.game.state import Move, encode_state, legal_mask, state_from_board
+from src.model.alphanet.network import AlphaNet
 
 class GameAI:
     def __init__(self, device: str | None = None):
@@ -21,7 +26,7 @@ class GameAI:
         self.model.load_state_dict(checkpoint)
         self.model.eval()
     
-    def inference(self, board: list[list[int]], player: int):
+    def inference(self, board: list[list[int]], player: int) -> dict:
         # board: provided by logic.board.getGrids()
         board_size = len(board)
         if board_size != self.board_size:
@@ -50,4 +55,44 @@ class GameAI:
         mask_list = mask.tolist()
 
         return {"pos": (x, y), "value": value, "scores": scores_list, "mask": mask_list}
+
+    def suggest_moves(
+        self,
+        board: list[list[int]],
+        player: int,
+        *,
+        limit: int = 3,
+    ) -> tuple[tuple[Move, float], ...]:
+        """Return the highest-probability legal policy moves for a position.
+
+        This derives suggestions from the existing masked policy output; it does
+        not alter the network or its inference constraints.
+        """
+        prediction = self.inference(board, player)
+        return self.suggestions_from_prediction(prediction, board_size=len(board), limit=limit)
+
+    @staticmethod
+    def suggestions_from_prediction(
+        prediction: dict,
+        *,
+        board_size: int,
+        limit: int = 3,
+    ) -> tuple[tuple[Move, float], ...]:
+        """Extract sorted legal move probabilities from an inference result."""
+        if limit < 1:
+            raise ValueError("limit must be at least 1.")
+
+        scores = prediction["scores"]
+        mask = prediction["mask"]
+        expected_length = board_size * board_size
+        if len(scores) != expected_length or len(mask) != expected_length:
+            raise ValueError("Prediction size does not match the board size.")
+
+        legal_suggestions = [
+            ((index // board_size, index % board_size), float(probability))
+            for index, (probability, is_legal) in enumerate(zip(scores, mask))
+            if is_legal
+        ]
+        legal_suggestions.sort(key=lambda suggestion: (-suggestion[1], suggestion[0]))
+        return tuple(legal_suggestions[:limit])
 

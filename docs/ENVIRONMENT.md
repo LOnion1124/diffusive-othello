@@ -50,6 +50,10 @@ Expected behavior:
 - `python gui.py --mode PVP` remains available as a quick start and should not
   require torch.
 - PVP should show the win-rate prediction bar during gameplay.
+- When a configured model is available, PVP and PVE should merge the current
+  human player's top-three legal policy probabilities into the legal-move
+  breathing highlights. PVE hides all legal-position and probability highlights
+  during the AI's turn.
 - PVP should attempt to load the configured model for prediction when available,
   and show `Invalid` at 50:50 when model loading or inference fails.
 
